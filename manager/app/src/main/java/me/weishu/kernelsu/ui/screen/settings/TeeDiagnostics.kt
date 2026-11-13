@@ -20,6 +20,17 @@ object TeeDiagnostics {
     private const val BIN = "$SEC/ta-enhanced/bin/ta-enhanced"
     private const val LOG = "$SEC/ta-enhanced/logs/main.log"
 
+
+    /** Every live keystore2 must contain the PID-scoped OMY payload. */
+    private val injectionProbe =
+        "KS=\$(pidof keystore2 2>/dev/null); I=1; [ -n \"\$KS\" ] || I=0; " +
+            "for K in \$KS; do " +
+            "if [ -r /data/adb/omk/injector.payload ] && awk -v want_pid=\"\$K\" '" +
+            "FNR == NR { if (\$1 == want_pid && \$2 != \"\") ident = \$2; next } " +
+            "ident != \"\" && index(\$0, ident) { found = 1; exit } " +
+            "END { exit found ? 0 : 1 }' /data/adb/omk/injector.payload /proc/\$K/maps 2>/dev/null; " +
+            "then :; else grep -qF '/data/adb/tricky_store/engine/' /proc/\$K/maps 2>/dev/null || I=0; fi; done; "
+
     /**
      * 引擎可能落地的位置：**内置那份在最前面**。
      *
@@ -56,7 +67,7 @@ object TeeDiagnostics {
         val engineDir: String?,
         val engineEnabled: Boolean,
         val enginePid: Int,
-        /** keystore2 的 maps 里是否已有 libTEESimulator：目录被删/模块被卸后，旧注入仍会残留到进程重启。 */
+        /** keystore2 的 maps 里是否已有 OMY inject：目录被删/模块被卸后，旧注入仍会残留到进程重启。 */
         val engineInjected: Boolean,
         val daemonBinary: Boolean,
         val daemonPid: Int,
@@ -111,12 +122,12 @@ object TeeDiagnostics {
             ENGINE_DIRS.forEach { append(" [ -d '$it' ] && [ -z \"\$E\" ] && E='$it';") }
             append(" echo \"ENGINE_DIR=\$E\";")
             append(" if [ -n \"\$E\" ] && [ -f \"\$E/disable\" ]; then echo 'ENGINE_DISABLED=1'; else echo 'ENGINE_DISABLED=0'; fi;")
-            append(" echo \"ENGINE_PID=\$(pidof TEESimulator 2>/dev/null | cut -d' ' -f1)\";")
+            append(" echo \"ENGINE_PID=\$(pidof keymint 2>/dev/null | cut -d' ' -f1)\";")
             // 2026-11-10 真机反馈："检测页 TEE 注入是绿的，但工具箱说没有引擎"。
             // 两者可以同时成立：模块目录被删/被卸后，keystore2 里旧的注入仍然残留，
             // 直到 keystore2 重启才失效。把这件事显式探出来，UI 才能说人话。
-            append(" KPID=\$(pidof keystore2 2>/dev/null);")
-            append(" I=1; [ -n \"\$KPID\" ] || I=0; for K in \$KPID; do grep -q libTEESimulator /proc/\$K/maps 2>/dev/null || I=0; done; echo \"ENGINE_INJECTED=\$I\";")
+            append(injectionProbe)
+            append("echo \"ENGINE_INJECTED=\$I\";")
             append(" if [ -x '$BIN' ]; then echo 'DAEMON_BIN=1'; else echo 'DAEMON_BIN=0'; fi;")
             append(" echo \"DAEMON_PID=\$(pidof ta-enhanced 2>/dev/null | cut -d' ' -f1)\";")
             append(" if [ -f '$TS/keybox.xml' ]; then echo 'KEYBOX=1';")
@@ -408,11 +419,10 @@ object TeeDiagnostics {
         while (waited < 24) {
             val probe = runCatching {
                 shell.newJob().add(
-                    "echo P=\$(pidof TEESimulator 2>/dev/null | cut -d' ' -f1); " +
+                    "echo P=\$(pidof keymint 2>/dev/null | cut -d' ' -f1); " +
                         // keystore2 重启窗口里可能有多个 pid：逐个看，别只看第一个 ——
                         // 只看第一个会把"只注入到将要退出的那个"报成成功。
-                        "KS=\$(pidof keystore2 2>/dev/null); I=1; [ -n \"\$KS\" ] || I=0; for K in \$KS; do " +
-                        "grep -q libTEESimulator /proc/\$K/maps 2>/dev/null || I=0; done; " +
+                        injectionProbe +
                         "echo I=\$I",
                 ).to(ArrayList<String>(), ArrayList<String>()).exec().out
             }.getOrNull().orEmpty()
@@ -427,22 +437,21 @@ object TeeDiagnostics {
             label = STEP_ENGINE,
             ok = pid > 0 && injected,
             detail = when {
-                pid <= 0 -> "18 秒内没看到 TEESimulator 进程"
-                injected -> "TEESimulator pid $pid，已注入 keystore2"
-                else -> "TEESimulator pid $pid，但尚未注入 keystore2"
+                pid <= 0 -> "18 秒内没看到 keymint 进程"
+                injected -> "keymint pid $pid，已注入 keystore2"
+                else -> "keymint pid $pid，但尚未注入 keystore2"
             },
         )
         steps += RepairStep(
             label = "keystore2 注入",
             ok = injected,
-            detail = if (injected) "libTEESimulator 已在 keystore2 的 maps 里" else "keystore2 里还没有注入（引擎没接管）",
+            detail = if (injected) "inject 载荷已在 keystore2 的 maps 里" else "keystore2 里还没有注入（引擎没接管）",
         )
         Result.success(steps)
     }
 
     private fun value(lines: List<String>, key: String): String? =
         lines.firstOrNull { it.startsWith("$key=") }?.substringAfter('=')
-
     /** 让守护进程拉一次 keybox（它自己带镜像/校验/信任锚判定），成功后再重启引擎。 */
     suspend fun refreshKeybox(): Result<String> = withContext(Dispatchers.IO) {
         val shell = awaitRootShell()
@@ -563,7 +572,8 @@ object TeeDiagnostics {
         repeat(20) {
             val probe = runCatching {
                 shell.newJob().add(
-                    "KS=\$(pidof keystore2 2>/dev/null); I=1; [ -n \"\$KS\" ] || I=0; for K in \$KS; do grep -q libTEESimulator /proc/\$K/maps 2>/dev/null || I=0; done; echo injected=\$I",
+                    "P=\$(pidof keymint 2>/dev/null); " + injectionProbe +
+                        "[ -n \"\$P\" ] || I=0; echo injected=\$I",
                 ).to(ArrayList<String>(), ArrayList<String>()).exec()
             }.getOrNull()
             if (probe?.out?.any { it.trim() == "injected=1" } == true) {
