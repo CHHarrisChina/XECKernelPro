@@ -61,14 +61,15 @@ pub fn on_post_fs_data() -> Result<()> {
     }
 
     let safe_mode = crate::utils::is_safe_mode();
-    let wait = ScriptWait::Until(Instant::now() + defs::BOOT_STAGE_TIMEOUT);
 
     if safe_mode {
         // we should still ensure module directory exists in safe mode
         // because we may need to operate the module dir in safe mode
         warn!("safe mode, skip common post-fs-data.d scripts");
     } else {
-        // Then exec common post-fs-data scripts
+        // Common scripts have their own budget; module preparation below must
+        // not consume the wait budget for module post-fs-data scripts.
+        let wait = ScriptWait::Until(Instant::now() + defs::BOOT_STAGE_TIMEOUT);
         if let Err(e) = crate::module::exec_common_scripts("post-fs-data.d", wait) {
             warn!("exec common post-fs-data scripts failed: {e}");
         }
@@ -160,6 +161,12 @@ pub fn on_post_fs_data() -> Result<()> {
     } else if let Err(e) = crate::feature::init_features() {
         warn!("init features failed: {e}");
     }
+
+    // Start the module script budget only once preparation is complete. Asset
+    // extraction, updates and policy setup can exceed the budget on a fresh
+    // boot; an expired deadline launches scripts without waiting, racing mount
+    // against the files those scripts prepare.
+    let wait = ScriptWait::Until(Instant::now() + defs::BOOT_STAGE_TIMEOUT);
 
     // execute metamodule post-fs-data script first (priority)
     if let Err(e) = metamodule::exec_stage_script("post-fs-data", wait) {

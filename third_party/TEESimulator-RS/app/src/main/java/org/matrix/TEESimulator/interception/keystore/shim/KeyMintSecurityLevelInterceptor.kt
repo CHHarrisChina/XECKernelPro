@@ -566,13 +566,11 @@ class KeyMintSecurityLevelInterceptor(
             // The first is the HAL's catch-all and is also returned for parameters it rejects;
             // whitelisting it would turn invalid requests into successes. The second is a
             // transient system condition, not a missing capability.
+            // Identity and rollback-protection failures are guarantees software cannot repair.
             -49, // SECURE_HW_COMMUNICATION_FAILED
             -64, // KEYMINT_NOT_CONFIGURED
-            -66, // CANNOT_ATTEST_IDS
-            -67, // ROLLBACK_RESISTANCE_UNAVAILABLE
             -68, // HARDWARE_TYPE_UNAVAILABLE
             -74, // ATTESTATION_KEYS_NOT_PROVISIONED
-            -75, // ATTESTATION_IDS_NOT_PROVISIONED
             -100, // UNIMPLEMENTED
             -> true
             else -> false
@@ -653,9 +651,6 @@ class KeyMintSecurityLevelInterceptor(
                     parsedParams,
                     keyId,
                     parsedParams.isAttestKey(),
-                    // This runs after the daemon refused, so a second failure must not delete
-                    // the previous key: clean up only once the replacement exists.
-                    deferReplacementCleanup = true,
                 )
             }
             .getOrElse { ex ->
@@ -794,19 +789,16 @@ class KeyMintSecurityLevelInterceptor(
                     return InterceptorUtils.createErrorReply(KEYMINT_INVALID_INPUT_LENGTH)
                 }
 
-                // SIGN 与 ATTEST_KEY 是互斥 purpose：ATTEST_KEY 只用于给"已存在的密钥"
-                // 补发证明链，不可能和发起签名的 purpose 同时落在同一把 key 上。真实
-                // KeyMint 在 generateKey 阶段就拒（INVALID_ARGUMENT）；接受它等于宣称我们
-                // 能生成真机生成不了的密钥——这是外部可直接观测的语义差异。
+                // KeyMint attestation keys must not authorize any other purpose.
                 if (
-                    parsedParams.purpose.contains(KeyPurpose.SIGN) &&
-                        parsedParams.purpose.contains(KeyPurpose.ATTEST_KEY)
+                    parsedParams.purpose.contains(KeyPurpose.ATTEST_KEY) &&
+                        parsedParams.purpose.any { it != KeyPurpose.ATTEST_KEY }
                 ) {
                     SystemLogger.warning(
-                        "[TX_ID: $txId] Rejecting mutually exclusive purposes SIGN+ATTEST_KEY"
+                        "[TX_ID: $txId] Rejecting ATTEST_KEY combined with another purpose"
                     )
                     logProbe("REJECT:purpose_conflict")
-                    return InterceptorUtils.createErrorReply(KEYMINT_INVALID_ARGUMENT)
+                    return InterceptorUtils.createErrorReply(KEYMINT_INCOMPATIBLE_PURPOSE)
                 }
 
                 if (params.any { it.tag == Tag.CREATION_DATETIME }) {
@@ -860,11 +852,8 @@ class KeyMintSecurityLevelInterceptor(
 
                 val keyId = KeyIdentifier(callingUid, keyDescriptor.alias)
 
-                // keystore2 generateKey replaces an existing alias; drop any cached chain from a
-                // prior generation on it so a later getKeyEntry serves THIS key, never a stale
-                // FORGE (an attest-key-mode leaf cached, then re-generated without an attest key,
-                // otherwise resurfaces and breaks the app's reassembled chain).
-                if (generatedKeys.containsKey(keyId)) cleanupKeyData(keyId)
+                // Keep the current key until its replacement has been created successfully.
+                // Successful HAL replies and software generation commit the cleanup below.
 
                 // Device-ID attestation must be forged, not patched: the real TEE returns
                 // CANNOT_ATTEST_IDS, so there is no real chain to patch — only a synthetic one
@@ -913,7 +902,6 @@ class KeyMintSecurityLevelInterceptor(
                     }
                     else -> {
                         logProbe("PASSTHROUGH")
-                        cleanupKeyData(keyId)
                         TransactionResult.Continue
                     }
                 }
@@ -924,7 +912,10 @@ class KeyMintSecurityLevelInterceptor(
                 // keybox) would otherwise leave no per-UID record. Pair this with the preceding
                 // `dispatch` line to see which request failed and why.
                 SystemLogger.uidLog(callingUid, txId, "forge-fail") { "ex=${ex.message}" }
-                InterceptorUtils.createServiceSpecificErrorReply(SECURE_HW_COMMUNICATION_FAILED)
+                InterceptorUtils.createServiceSpecificErrorReply(
+                    (ex as? android.os.ServiceSpecificException)?.errorCode
+                        ?: SECURE_HW_COMMUNICATION_FAILED
+                )
             }
     }
 
@@ -936,23 +927,19 @@ class KeyMintSecurityLevelInterceptor(
         parsedParams: KeyMintAttestation,
         keyId: KeyIdentifier,
         isAttestKeyRequest: Boolean,
-        /**
-         * Skip the up-front replacement cleanup and run it just before the put instead.
-         *
-         * The normal path clears the old key first, which is right when a successful
-         * generateKey is replacing it. The post-hook fallback runs only after the daemon
-         * already refused, so a failure while building the replacement must leave the
-         * previous key usable rather than deleting it and putting nothing back.
-         */
-        deferReplacementCleanup: Boolean = false,
     ): TransactionResult {
         val genStartNanos = System.nanoTime()
+        // The post-HAL fallback also enters here, so enforce the same purpose contract.
+        if (
+            parsedParams.purpose.contains(KeyPurpose.ATTEST_KEY) &&
+                parsedParams.purpose.any { it != KeyPurpose.ATTEST_KEY }
+        ) {
+            return InterceptorUtils.createErrorReply(KEYMINT_INCOMPATIBLE_PURPOSE)
+        }
         keyDescriptor.nspace = secureRandom.nextLong()
         SystemLogger.info(
             "Generating software key for ${keyDescriptor.alias}[${keyDescriptor.nspace}]."
         )
-
-        if (!deferReplacementCleanup) cleanupKeyData(keyId)
 
         val isSymmetric =
             parsedParams.algorithm != Algorithm.EC && parsedParams.algorithm != Algorithm.RSA
@@ -1003,6 +990,7 @@ class KeyMintSecurityLevelInterceptor(
                     this.metadata = metadata
                     iSecurityLevel = original
                 }
+            cleanupKeyData(keyId)
             generatedKeys[keyId] =
                 GeneratedKeyInfo(null, secretKey, keyDescriptor.nspace, response, parsedParams)
             Keystore2Interceptor.forgetDeletedKey(keyId)
@@ -1114,7 +1102,7 @@ class KeyMintSecurityLevelInterceptor(
         val response =
             buildKeyEntryResponse(callingUid, keyData.second, parsedParams, keyDescriptor)
         AttestationDossier.logAuthShape(callingUid, txId, response.metadata?.authorizations)
-        if (deferReplacementCleanup) cleanupKeyData(keyId)
+        cleanupKeyData(keyId)
         generatedKeys[keyId] =
             GeneratedKeyInfo(keyData.first, null, keyDescriptor.nspace, response, parsedParams)
         Keystore2Interceptor.forgetDeletedKey(keyId)
@@ -1661,6 +1649,7 @@ class KeyMintSecurityLevelInterceptor(
         // Binder buffer is ~1MB; 256KB provides 4x safety margin for transaction overhead
         private const val MAX_ALIAS_LENGTH = 256 * 1024
         private const val KEYMINT_INVALID_INPUT_LENGTH = -21
+        private const val KEYMINT_INCOMPATIBLE_PURPOSE = -3
         private const val KEYMINT_INVALID_ARGUMENT = -38
         private const val RESPONSE_INVALID_ARGUMENT = 20
         private const val RESPONSE_PERMISSION_DENIED = 6

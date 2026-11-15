@@ -86,10 +86,12 @@ object ThemeController {
 @Composable
 fun KernelSUTheme(
     appSettings: AppSettings = ThemeController.getAppSettings(),
+    globalBackgroundActive: Boolean = false,
     content: @Composable () -> Unit
 ) {
     MiuixKernelSUTheme(
         appSettings = appSettings,
+        globalBackgroundActive = globalBackgroundActive,
         content = content
     )
 }

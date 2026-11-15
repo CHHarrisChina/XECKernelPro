@@ -29,6 +29,7 @@ import top.yukonga.miuix.kmp.theme.defaultTextStyles
 @Composable
 fun MiuixKernelSUTheme(
     appSettings: AppSettings,
+    globalBackgroundActive: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -198,7 +199,7 @@ fun MiuixKernelSUTheme(
                 accented.copy(
                     // 扁平方案 A：整页实色，不再让壁纸透出来（之前的 0.80 会把
                     // 底色调成一张"灰纸"，和设计稿的 #0B0B0E / #F5F5F7 对不上）。
-                    background = xc.backdrop,
+                    background = if (globalBackgroundActive) Color.Transparent else xc.backdrop,
                     // 强调色钉死成设计稿那一个值：materialkolor 派生会把 #6B84FF
                     // 拉成一族相近但不相同的蓝，按钮和设计稿就对不上了。
                     primary = xc.accent,
@@ -242,7 +243,7 @@ fun MiuixKernelSUTheme(
                 // surface 纯白 / text 近黑）与深色档共用同一套语义槽位，规则一致，
                 // 只是把值换掉，所以这里是深色分支的镜像，不是第二套设计。
                 accented.copy(
-                    background = xc.backdrop,
+                    background = if (globalBackgroundActive) Color.Transparent else xc.backdrop,
                     primary = xc.accent,
                     onPrimary = Color.White,
                     onBackground = xc.text,

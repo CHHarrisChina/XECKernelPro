@@ -138,6 +138,7 @@ import me.weishu.kernelsu.ui.util.install
 import me.weishu.kernelsu.ui.util.rememberBlurBackdrop
 import me.weishu.kernelsu.ui.util.rememberContentReady
 import me.weishu.kernelsu.ui.util.WallpaperStore
+import me.weishu.kernelsu.ui.util.GlobalBackgroundStore
 import me.weishu.kernelsu.ui.viewmodel.MainActivityViewModel
 import me.weishu.kernelsu.ui.viewmodel.MainPagerConfig
 import me.weishu.kernelsu.ui.viewmodel.ModuleViewModel
@@ -210,6 +211,14 @@ open class MainActivity : ComponentActivity() {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             val selectedMainPage by viewModel.selectedMainPage.collectAsStateWithLifecycle()
             val appSettings = uiState.appSettings
+            val globalBackgroundStore = remember { GlobalBackgroundStore.get(appContext) }
+            val globalBackground by globalBackgroundStore.settings.collectAsStateWithLifecycle()
+            // Keep the decoded image keyed by name: reset/replacement cannot display stale pixels.
+            val globalBitmap by produceState<Pair<String, ImageBitmap?>?>(null, globalBackground.image) {
+                value = globalBackground.image to globalBackgroundStore.decode(globalBackground.image)?.asImageBitmap()
+            }
+            val activeGlobalBitmap = globalBitmap?.takeIf { it.first == globalBackground.image }?.second
+            val globalBackgroundActive = activeGlobalBitmap != null
             val darkMode = appSettings.colorMode.isDark || (appSettings.colorMode.isSystem && isSystemInDarkTheme())
 
             DisposableEffect(darkMode) {
@@ -266,7 +275,7 @@ open class MainActivity : ComponentActivity() {
                     SideEffect {
                         window.setBackgroundDrawable(ColorDrawable(windowBackdrop.toArgb()))
                     }
-                    KernelSUTheme(appSettings = appSettings) {
+                    KernelSUTheme(appSettings = appSettings, globalBackgroundActive = globalBackgroundActive) {
                         // 对话框的玻璃要采"整个窗口"的图层，所以 backdrop 只能建在根层：
                         // 各页自己的 rememberBlurBackdrop 只覆盖那一页，而对话框宿主是
                         // 5 个 nav entry（Main / Home / SuperUser / Module / Settings）
@@ -533,11 +542,23 @@ open class MainActivity : ComponentActivity() {
                                             .fillMaxSize()
                                             .background(Xc.colors.backdrop),
                                     )
-                                    // 2026-11-10：导航宿主自己也铺一层实色底。页面过渡是
-                                    // 交叉淡入淡出，两条 entry 同时半透明时，露出来的必须是
-                                    // 纸色 —— 以前露的是 windowBackground(#0B0F10)，看起来
-                                    // 就是每次转场都闪一圈黑框。
-                                    Scaffold(containerColor = Xc.colors.backdrop) {
+                                    // The global layer is independent of legacy wallpaper and card settings.
+                                    // Draw its readability veil once at the root, avoiding accumulated page veils.
+                                    if (activeGlobalBitmap != null) {
+                                        Image(
+                                            bitmap = activeGlobalBitmap,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop,
+                                            alpha = globalBackground.opacity / 100f,
+                                        )
+                                        Box(
+                                            Modifier.fillMaxSize().background(
+                                                Xc.colors.backdrop.copy(alpha = globalBackground.readability / 100f)
+                                            )
+                                        )
+                                    }
+                                    Scaffold(containerColor = if (globalBackgroundActive) Color.Transparent else Xc.colors.backdrop) {
                                         navDisplay()
                                     }
                                 }

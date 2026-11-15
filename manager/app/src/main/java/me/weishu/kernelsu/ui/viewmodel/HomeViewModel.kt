@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.BuildConfig
@@ -56,6 +57,7 @@ class HomeViewModel(
 
     /** 当前在跑的那一轮刷新；用于重入合并（见 [refresh]）。 */
     private var refreshJob: Job? = null
+    private var refreshPending = false
 
     init {
         // 首帧只是"占位"，真正的状态靠这一轮拿到（在 IO 线程上）。
@@ -66,7 +68,17 @@ class HomeViewModel(
         viewModelScope.launch {
             KsuCli.rootReady
                 .filter { it }
-                .collect { refresh() }
+                .collect {
+                    refresh()
+                    try {
+                        me.weishu.kernelsu.ui.util.TeeEngineStartup.ensureStarted()
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        android.util.Log.w("HomeViewModel", "Engine readiness check failed", error)
+                    }
+                    refresh()
+                }
         }
         // 第一次探测落定（成功或失败）也要重算一次：首帧的 isRootAvailable 只是
         // "还没问到"，探测落定之后才允许出现「获取 Root 失败」这类告警。
@@ -81,7 +93,10 @@ class HomeViewModel(
         // 2026-11-09：首页、工具箱、下拉刷新、顶栏刷新会同时打进来；以前每次调用都
         // 新开一个协程，几条探测（root shell / 更新检查）并发跑会互相覆盖状态流。
         // 这里做**重入合并**：已经有一轮在跑就忽略新请求 —— 一轮跑完状态一定比旧的新。
-        if (refreshJob?.isActive == true) return
+        if (refreshJob?.isActive == true) {
+            refreshPending = true
+            return
+        }
         refreshJob = viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
             try {
@@ -99,6 +114,11 @@ class HomeViewModel(
             } finally {
                 // 失败也要收指示器：宁可让用户看到"没刷出来"，也不要一直转圈。
                 _uiState.update { it.copy(isRefreshing = false) }
+                refreshJob = null
+                if (refreshPending && isActive) {
+                    refreshPending = false
+                    refresh()
+                }
             }
         }
     }
@@ -203,18 +223,7 @@ class HomeViewModel(
         // 只看 pidof 会把"进程活着但注入失败"误判为健康；这里用一次只读 root 探测，
         // 结果同时供首页 XEC Score 使用。
         val teeInjected: Boolean? = if (deep && isRootAvailable) runCatching {
-            val shell = getRootShell()
-            val pid = ShellUtils.fastCmd(shell, "pidof keystore2 2>/dev/null")
-                .trim()
-                .substringBefore(' ')
-            if (pid.isNotEmpty() && pid.all(Char::isDigit)) {
-                ShellUtils.fastCmd(
-                    shell,
-                    "grep -q libTEESimulator /proc/$pid/maps 2>/dev/null && echo -n yes",
-                ).trim() == "yes"
-            } else {
-                false
-            }
+            me.weishu.kernelsu.ui.util.TeeEngineStartup.isInjected()
         }.getOrNull() else null
         val managerVersion = getManagerVersion(ksuApp)
 

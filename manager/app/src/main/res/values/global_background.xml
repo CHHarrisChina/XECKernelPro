@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="global_background_title">Global background</string>
+    <string name="global_background_summary">Use one image behind all native pages in light and dark mode. Stored separately from local wallpapers and card backgrounds. Readability adds the current theme color over the image; higher values make text easier to read. Reset restores the default page background.</string>
+    <string name="global_background_default">Default page background</string>
+    <string name="global_background_selected">Custom global image selected</string>
+    <string name="global_background_busy">Saving background...</string>
+    <string name="global_background_pick">Choose image</string>
+    <string name="global_background_reset">Reset global background</string>
+    <string name="global_background_opacity">Image opacity</string>
+    <string name="global_background_readability">Readability overlay</string>
+    <string name="global_background_failed">Could not update the global background. Choose a supported image smaller than 32 MB and try again.</string>
+</resources>

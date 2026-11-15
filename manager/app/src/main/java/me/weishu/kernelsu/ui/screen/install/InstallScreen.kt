@@ -77,23 +77,26 @@ fun InstallScreen() {
     // null = 用户还没显式设置过 → 一直算"自动"。用户改过就按用户的，不再被探测结果覆盖。
     var magiskLegacySar by rememberSaveable { mutableStateOf<Boolean?>(null) }
 
+    val rootReady by KsuCli.rootReady.collectAsStateWithLifecycle()
+    val rootProbeSettled by KsuCli.probeSettled.collectAsStateWithLifecycle()
     val currentKmi by produceState(initialValue = "") { value = withContext(Dispatchers.IO) { getCurrentKmi() } }
-    val partitions by produceState(initialValue = emptyList()) {
+    // Boot metadata may be read through the non-root fallback during startup.
+    // Refresh it with the root gate so a later grant also restores partitions
+    // and replaces the guessed default before direct installation.
+    val partitions by produceState(initialValue = emptyList(), rootReady, rootProbeSettled) {
         value = withContext(Dispatchers.IO) { getAvailablePartitions() }
     }
-    val defaultPartition by produceState(initialValue = "") {
+    val defaultPartition by produceState(initialValue = "", rootReady, rootProbeSettled) {
         value = withContext(Dispatchers.IO) { getDefaultPartition() }
     }
     // root 与 GKI 用 null 表示「尚未探测完成」：探测期间这几项按可用渲染，
     // 结果回来后再决定是否降级成「可见但不可用」，避免首帧闪一下灰态。
     // Re-probe when the background shell acquisition changes state. A first
     // non-root fallback must not leave direct installation disabled forever.
-    val rootReady by KsuCli.rootReady.collectAsStateWithLifecycle()
-    val rootProbeSettled by KsuCli.probeSettled.collectAsStateWithLifecycle()
     val rootAvailable by produceState<Boolean?>(initialValue = null, rootReady, rootProbeSettled) {
         value = withContext(Dispatchers.IO) { rootAvailable() }
     }
-    val isAbDevice by produceState(initialValue = false) {
+    val isAbDevice by produceState(initialValue = false, rootReady, rootProbeSettled) {
         value = withContext(Dispatchers.IO) { isAbDevice() }
     }
     val isGkiDevice by produceState<Boolean?>(initialValue = null) { value = getKernelVersion().isGKI() }
@@ -194,7 +197,7 @@ fun InstallScreen() {
     }
 
     val isOta = installMethod is InstallMethod.DirectInstallToInactiveSlot
-    val slotSuffix by produceState(initialValue = "", isOta) { value = getSlotSuffix(isOta) }
+    val slotSuffix by produceState(initialValue = "", isOta, rootReady, rootProbeSettled) { value = getSlotSuffix(isOta) }
     val defaultIndex = remember(partitions, defaultPartition) {
         partitions.indexOf(defaultPartition).coerceAtLeast(0)
     }

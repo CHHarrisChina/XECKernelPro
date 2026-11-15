@@ -147,6 +147,7 @@ fun WallpaperScreenMiuix(
             ) {
                 item {
                     Spacer(Modifier.height(12.dp))
+                    GlobalBackgroundSettings()
                     WallpaperSlotCard(
                         title = stringResource(R.string.wallpaper_light_title),
                         summary = slotSummary(
