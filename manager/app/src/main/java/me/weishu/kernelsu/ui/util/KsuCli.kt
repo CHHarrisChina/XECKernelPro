@@ -372,6 +372,13 @@ object KsuCli {
                     val wait = slot.retryAtElapsedMs - SystemClock.elapsedRealtime()
                     if (wait > 0) Thread.sleep(wait.coerceAtMost(NON_ROOT_RETRY_MAX_MS))
                     val shell = probeOnce(slot, globalMnt)
+                    // A concurrent probe or a stale capability snapshot is not a
+                    // failure: wait briefly and re-check instead of counting it.
+                    if (shell == null) {
+                        Thread.sleep(150)
+                        attempt++
+                        continue
+                    }
                     if (shell.isAlive && shell.isRoot) return@Thread
                     attempt++
                 }
