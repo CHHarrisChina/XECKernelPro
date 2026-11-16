@@ -534,13 +534,18 @@ open class MainActivity : ComponentActivity() {
                                             contentScale = ContentScale.Crop,
                                         )
                                     }
-                                    // 扁平方案 A：整页实色底，壁纸层不再参与视觉。
-                                    // 画在壁纸之后 = 盖住它；壁纸的解码链路保留（设置里
-                                    // 那套入口还在），下一批连同设置项一起清理。
+                                    // 2026-11-17：恢复"自定义背景可见"。整页实色底只在不
+                                    // 使用全局背景、也没有选过浅/深档壁纸时才铺 —— 否则
+                                    // 壁纸层画了也看不见（"选了也白选"）。
+                                    val pageBackground = if (customWallpaperName.isNotEmpty()) {
+                                        Color.Transparent
+                                    } else {
+                                        Xc.colors.backdrop
+                                    }
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .background(Xc.colors.backdrop),
+                                            .background(pageBackground),
                                     )
                                     // The global layer is independent of legacy wallpaper and card settings.
                                     // Draw its readability veil once at the root, avoiding accumulated page veils.
@@ -558,7 +563,13 @@ open class MainActivity : ComponentActivity() {
                                             )
                                         )
                                     }
-                                    Scaffold(containerColor = if (globalBackgroundActive) Color.Transparent else Xc.colors.backdrop) {
+                                    Scaffold(
+                                        containerColor = if (globalBackgroundActive) {
+                                            Color.Transparent
+                                        } else {
+                                            pageBackground
+                                        },
+                                    ) {
                                         navDisplay()
                                     }
                                 }

@@ -161,12 +161,8 @@ Java_me_weishu_kernelsu_Natives_getUtsSpoof(JNIEnv *env, jobject, jint uid) {
 extern "C"
 JNIEXPORT jint JNICALL
 Java_me_weishu_kernelsu_Natives_getVersion(JNIEnv *env, jobject) {
-    int version = get_version();
-    if (version > 0) {
-        return version;
-    }
-    // try legacy method as fallback
-    return legacy_get_info().first;
+    // Generic KernelSU prctl replies do not establish XEC driver identity.
+    return get_version();
 }
 
 extern "C"

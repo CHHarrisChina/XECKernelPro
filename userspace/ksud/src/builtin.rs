@@ -281,6 +281,21 @@ fn install_builtin_modules_impl(forced: bool) -> Result<InstallReport> {
         return Ok(InstallReport::default());
     }
 
+    // Retire installer-owned module-era copies even when the master switch is off.
+    // Preserve their configuration before removing them from Android's module scan.
+    for id in ["tricky_store", ".tricky_store", "TA_enhanced"] {
+        let legacy = Path::new(defs::MODULE_DIR).join(id);
+        if legacy.join(STAMP_FILE_NAME).is_file() || is_own_engine_copy(&legacy) {
+            preserve_legacy_config(id, &legacy)?;
+            fs::create_dir_all(EXTERNAL_BACKUP_DIR)?;
+            let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+            fs::rename(
+                &legacy,
+                Path::new(EXTERNAL_BACKUP_DIR).join(format!("{id}-{stamp}")),
+            )?;
+        }
+    }
+
     // 产品策略：内置引擎优先。开机路径也要先把外部引擎压下去，否则它会跟内置树
     // 各自 stand down（见 `yield_external_engines` 的注释）。
     if tee_engine_enabled() {
@@ -345,6 +360,23 @@ fn group_builtin_assets() -> Result<BTreeMap<String, Vec<BuiltinFile>>> {
     Ok(modules)
 }
 
+fn preserve_legacy_config(module_id: &str, legacy: &Path) -> Result<()> {
+    if module_id != "tricky_store" && module_id != ".tricky_store" {
+        return Ok(());
+    }
+    let runtime = Path::new("/data/adb/tricky_store");
+    fs::create_dir_all(runtime)?;
+    for name in ["keybox.xml", "target.txt", "security_patch.txt"] {
+        let source = legacy.join(name);
+        let target = runtime.join(name);
+        if source.is_file() && !target.exists() {
+            fs::copy(&source, &target)
+                .with_context(|| format!("preserve legacy configuration {}", source.display()))?;
+        }
+    }
+    Ok(())
+}
+
 /// Install one embedded module tree into `/data/adb/ksu/builtin/<id>/`.
 ///
 /// Returns whether the tree was (re)written. A stamp alone is not enough to skip
@@ -360,6 +392,7 @@ fn install_module(module_id: &str, files: &[BuiltinFile]) -> Result<bool> {
     // and deleting it here would throw away their own target.txt/keybox edits.
     let legacy = Path::new(defs::MODULE_DIR).join(module_id);
     if legacy.join(STAMP_FILE_NAME).is_file() {
+        preserve_legacy_config(module_id, &legacy)?;
         match fs::remove_dir_all(&legacy) {
             Ok(()) => info!("removed the module-era copy at {}", legacy.display()),
             Err(error) => warn!("failed to remove {}: {error}", legacy.display()),
@@ -555,6 +588,12 @@ pub fn start_tee_engine(wait_for_engine: bool) -> Result<StartReport> {
     // 下一次修复后继续跑，几轮下来就是多份看护一起重拉 supervisor。
     stop_previous_run();
 
+    // A userspace restart does not unload keystore2's old injected mapping.
+    // Ask the upstream injector wrapper to refresh it when the new wrapper
+    // starts, instead of accepting the old payload as a repaired engine.
+    fs::create_dir_all("/data/adb/omk")?;
+    fs::write("/data/adb/omk/restart.injector", b"1\n")?;
+
     // 尽力而为：内核不是本项目时这条一定失败，但引擎本身不依赖它
     // （KernelSU 域的 su 是 permissive + allow-all，注入走的是 ptrace 而不是这些规则）。
     if let Err(error) = load_sepolicy_rules() {
@@ -718,6 +757,10 @@ pub fn yield_external_engines() -> Vec<String> {
             continue;
         }
         if is_own_engine_copy(&dir) {
+            if let Err(error) = preserve_legacy_config(id, &dir) {
+                warn!("cannot preserve {}: {error:#}", dir.display());
+                continue;
+            }
             let stamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_or(0, |elapsed| elapsed.as_secs());
@@ -762,6 +805,16 @@ pub fn yield_external_engines() -> Vec<String> {
 
 /// 用户关掉内置引擎时调用：把被我们压住的第三方模块原样放回。
 pub fn release_external_engines() {
+    for name in ["keymint", "inject"] {
+        let live = Path::new("/data/adb/omk").join(name);
+        let backup = Path::new("/data/adb/omk").join(format!("{name}.pre-xec"));
+        if backup.exists()
+            && !live.exists()
+            && let Err(error) = fs::rename(&backup, &live)
+        {
+            warn!("cannot restore OMY override {}: {error:#}", live.display());
+        }
+    }
     for id in EXTERNAL_ENGINE_DIRS {
         let dir = Path::new(defs::MODULE_DIR).join(id);
         let marker = dir.join(SUPPRESSED_MARKER);

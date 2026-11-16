@@ -121,7 +121,7 @@ object TeeDiagnostics {
             append("E='';")
             ENGINE_DIRS.forEach { append(" [ -d '$it' ] && [ -z \"\$E\" ] && E='$it';") }
             append(" echo \"ENGINE_DIR=\$E\";")
-            append(" if [ -n \"\$E\" ] && [ -f \"\$E/disable\" ]; then echo 'ENGINE_DISABLED=1'; else echo 'ENGINE_DISABLED=0'; fi;")
+            append(" if [ -f /data/adb/ksu/.tee_engine_off ] || { [ -n \"\$E\" ] && [ -f \"\$E/disable\" ]; }; then echo 'ENGINE_DISABLED=1'; else echo 'ENGINE_DISABLED=0'; fi;")
             append(" echo \"ENGINE_PID=\$(pidof keymint 2>/dev/null | cut -d' ' -f1)\";")
             // 2026-11-10 真机反馈："检测页 TEE 注入是绿的，但工具箱说没有引擎"。
             // 两者可以同时成立：模块目录被删/被卸后，keystore2 里旧的注入仍然残留，

@@ -5,8 +5,9 @@ use crate::ksu_uapi;
 use std::cell::Cell;
 use std::fs;
 use std::io;
-use std::os::fd::RawFd;
-use std::sync::OnceLock;
+use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
+use std::os::unix::fs::OpenOptionsExt;
+use std::sync::Mutex;
 
 // sigsys handler
 std::thread_local! {
@@ -83,26 +84,76 @@ pub fn setup_sigsys_handler() {
 const DRIVER_FD_NAME: &str = "anon_inode:[xecpro_driver]";
 const SU_DRIVER_FD_NAME: &str = "anon_inode:[xecpro_driver_su]";
 
-// Global driver fd cache
-static DRIVER_FD: OnceLock<RawFd> = OnceLock::new();
-static INFO_CACHE: OnceLock<ksu_uapi::ksu_get_info_cmd> = OnceLock::new();
+// Serialize acquisition, validation and ioctl use so cache replacement cannot
+// close a descriptor while another caller is using it.
+static DRIVER_FD: Mutex<Option<OwnedFd>> = Mutex::new(None);
 
-fn scan_driver_fd() -> io::Result<Option<RawFd>> {
-    let fd_dir = fs::read_dir("/proc/self/fd")?;
+fn is_own_driver_fd(fd: RawFd) -> bool {
+    fs::read_link(format!("/proc/self/fd/{fd}")).is_ok_and(|target| {
+        target == std::path::Path::new(DRIVER_FD_NAME)
+            || target == std::path::Path::new(SU_DRIVER_FD_NAME)
+    })
+}
+
+fn validate_driver_cache(cache: &mut Option<OwnedFd>) {
+    if cache
+        .as_ref()
+        .is_some_and(|fd| !is_own_driver_fd(fd.as_raw_fd()))
+    {
+        // A raw close elsewhere (for example, unload) may already have freed
+        // this number. Do not close it again: it may now name an unrelated fd.
+        if let Some(stale) = cache.take() {
+            let _ = stale.into_raw_fd();
+        }
+    }
+}
+
+fn ensure_driver_fd(cache: &mut Option<OwnedFd>) -> bool {
+    validate_driver_cache(cache);
+    if cache.is_none() {
+        *cache = init_driver_fd();
+    }
+    cache.is_some()
+}
+
+/// Recognize this implementation, rather than any driver sharing KSU ioctls.
+/// Keep a failed probe retryable: late-load may install our module afterwards.
+pub fn probe_own_driver() -> bool {
+    let mut cache = DRIVER_FD
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    ensure_driver_fd(&mut cache)
+}
+
+fn scan_driver_fd() -> io::Result<Option<OwnedFd>> {
+    // Finish enumeration before creating duplicates, so the scan cannot visit
+    // its own newly allocated descriptors.
+    let candidates: Vec<RawFd> = fs::read_dir("/proc/self/fd")?
+        .flatten()
+        .filter_map(|entry| entry.file_name().to_string_lossy().parse().ok())
+        .collect();
     let mut driver_fd = None;
 
-    for entry in fd_dir.flatten() {
-        if let Ok(fd_num) = entry.file_name().to_string_lossy().parse::<i32>() {
-            let link_path = format!("/proc/self/fd/{fd_num}");
-            if let Ok(target) = fs::read_link(&link_path) {
-                let target_str = target.to_string_lossy();
-                if target_str == SU_DRIVER_FD_NAME {
-                    return Ok(Some(fd_num));
-                }
-                if target_str == DRIVER_FD_NAME {
-                    driver_fd = Some(fd_num);
-                }
-            }
+    for fd_num in candidates {
+        if !is_own_driver_fd(fd_num) {
+            continue;
+        }
+        // Borrowed inherited fds can be closed by their owner. Duplicate first,
+        // then validate the duplicate to reject a close/reuse during the scan.
+        let duplicate = unsafe { libc::fcntl(fd_num, libc::F_DUPFD_CLOEXEC, 0) };
+        if duplicate < 0 {
+            continue;
+        }
+        // SAFETY: fcntl returned a new descriptor owned by this acquisition.
+        let fd = unsafe { OwnedFd::from_raw_fd(duplicate) };
+        let Ok(target) = fs::read_link(format!("/proc/self/fd/{}", fd.as_raw_fd())) else {
+            continue;
+        };
+        if target == std::path::Path::new(SU_DRIVER_FD_NAME) {
+            return Ok(Some(fd));
+        }
+        if target == std::path::Path::new(DRIVER_FD_NAME) {
+            driver_fd = Some(fd);
         }
     }
 
@@ -110,67 +161,86 @@ fn scan_driver_fd() -> io::Result<Option<RawFd>> {
 }
 
 pub fn claim_inherited_driver_fd() -> io::Result<()> {
-    if DRIVER_FD.get().is_none()
-        && let Some(fd) = scan_driver_fd()?
-    {
-        let _ = DRIVER_FD.set(fd);
+    let mut cache = DRIVER_FD
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    validate_driver_cache(&mut cache);
+    if cache.is_none() {
+        *cache = scan_driver_fd()?;
     }
+    drop(cache);
     Ok(())
 }
 
-// Get cached driver fd
-fn init_driver_fd() -> Option<RawFd> {
-    let fd = scan_driver_fd().ok().flatten();
-    if fd.is_none() {
-        let mut fd = -1;
-        with_svc_call(|| unsafe {
-            libc::syscall(
-                libc::SYS_reboot,
-                ksu_uapi::KSU_INSTALL_MAGIC1,
-                ksu_uapi::KSU_INSTALL_MAGIC2,
-                0,
-                &mut fd,
-            )
-        });
-        if take_sigsys_occurred() {
-            eprintln!("KernelSU driver install syscall was blocked by seccomp");
-            log::error!("KernelSU driver install syscall was blocked by seccomp");
-        }
-        if fd >= 0 { Some(fd) } else { None }
-    } else {
-        fd
+fn init_driver_fd() -> Option<OwnedFd> {
+    if let Some(fd) = scan_driver_fd().ok().flatten() {
+        return Some(fd);
     }
+    let mut fd = -1;
+    with_svc_call(|| unsafe {
+        libc::syscall(
+            libc::SYS_reboot,
+            ksu_uapi::KSU_INSTALL_MAGIC1,
+            ksu_uapi::KSU_INSTALL_MAGIC2,
+            0,
+            &mut fd,
+        )
+    });
+    if take_sigsys_occurred() {
+        eprintln!("KernelSU driver install syscall was blocked by seccomp");
+        log::error!("KernelSU driver install syscall was blocked by seccomp");
+    }
+    if fd < 0 {
+        return None;
+    }
+    // SAFETY: the install syscall returned a new descriptor to this caller.
+    let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+    is_own_driver_fd(fd.as_raw_fd()).then_some(fd)
 }
 
 // ioctl wrapper using libc
 pub fn ksuctl<T>(request: u32, arg: *mut T) -> Result<i32> {
-    let fd = *DRIVER_FD.get_or_init(|| init_driver_fd().unwrap_or(-1));
-    if fd < 0 {
-        bail!("could not retrieve kernelsu driver fd")
+    let mut cache = DRIVER_FD
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if !ensure_driver_fd(&mut cache) {
+        bail!("could not retrieve own XEC driver fd")
     }
-    unsafe {
-        let ret = libc::ioctl(fd as libc::c_int, request as i32, arg);
-        if ret < 0 {
-            bail!("ksuctl failed: {}", io::Error::last_os_error())
-        }
-        Ok(ret)
+    let fd = cache
+        .as_ref()
+        .expect("own driver acquisition populated cache");
+    let ret = unsafe { libc::ioctl(fd.as_raw_fd(), request as i32, arg) };
+    if ret < 0 {
+        let error = io::Error::last_os_error();
+        validate_driver_cache(&mut cache);
+        // Never replay an ioctl: a mutating request may already have taken
+        // effect. A later call can reacquire a stale or missing descriptor.
+        bail!("ksuctl failed: {error}")
     }
+    drop(cache);
+    Ok(ret)
 }
 
 // API implementations
 pub fn get_info() -> ksu_uapi::ksu_get_info_cmd {
-    *INFO_CACHE.get_or_init(|| {
-        let mut cmd = ksu_uapi::ksu_get_info_cmd {
+    // GET_INFO also schedules the kernel's existing signature-based recovery.
+    // A cached failure or compatibility answer must not suppress later retries.
+    let mut cmd = ksu_uapi::ksu_get_info_cmd {
+        version: 0,
+        flags: 0,
+        features: 0,
+        uapi_version: 0,
+    };
+    if ksuctl(ksu_uapi::KSU_IOCTL_GET_INFO, &raw mut cmd).is_err() {
+        cmd = ksu_uapi::ksu_get_info_cmd {
             version: 0,
             flags: 0,
             features: 0,
             uapi_version: 0,
         };
-        if ksuctl(ksu_uapi::KSU_IOCTL_GET_INFO, &raw mut cmd).is_err() {
-            let _ = ksuctl(ksu_uapi::KSU_IOCTL_GET_INFO_LEGACY, &raw mut cmd);
-        }
-        cmd
-    })
+        let _ = ksuctl(ksu_uapi::KSU_IOCTL_GET_INFO_LEGACY, &raw mut cmd);
+    }
+    cmd
 }
 
 pub fn get_version() -> i32 {
@@ -201,6 +271,96 @@ pub fn runtime_mode() -> &'static str {
         "lkm"
     } else {
         "built-in"
+    }
+}
+
+/// Root boot stages can recover identity without an app-side reboot syscall.
+pub fn recover_manager_identity() -> anyhow::Result<bool> {
+    if unsafe { libc::geteuid() } != 0 {
+        bail!("manager recovery requires the existing root boot process");
+    }
+    let mut before: u32 = u32::MAX;
+    ksuctl(ksu_uapi::KSU_IOCTL_GET_MANAGER_APPID, &raw mut before)?;
+    let mut info = ksu_uapi::ksu_get_info_cmd {
+        version: 0,
+        flags: 0,
+        features: 0,
+        uapi_version: 0,
+    };
+    // Existing GET_INFO schedules signature-verified task_work. It completes
+    // on this thread's syscall return; no new kernel ABI or UID override.
+    ksuctl(ksu_uapi::KSU_IOCTL_GET_INFO, &raw mut info)?;
+    let mut after: u32 = u32::MAX;
+    ksuctl(ksu_uapi::KSU_IOCTL_GET_MANAGER_APPID, &raw mut after)?;
+    Ok(before == u32::MAX && after != u32::MAX && after != 0)
+}
+
+pub fn recover_manager_at_boot() {
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+    match recover_manager_identity() {
+        Ok(true) => {
+            // Defer ActivityManager interaction until boot-completed.
+            let boot_id = fs::read_to_string("/proc/sys/kernel/random/boot_id");
+            let result = boot_id.and_then(|id| {
+                use std::io::Write;
+                let marker = "/data/adb/ksu/.manager-recovery-pending";
+                fs::create_dir_all("/data/adb/ksu")?;
+                if let Ok(previous) = fs::read_to_string(marker) {
+                    if previous == id {
+                        return Ok(());
+                    }
+                    fs::remove_file(marker)?;
+                }
+                let mut file = fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .mode(0o600)
+                    .open(marker)?;
+                file.write_all(id.as_bytes())
+            });
+            if let Err(error) = result {
+                log::warn!("cannot record manager recovery: {error}");
+            }
+        }
+        Ok(false) => {}
+        Err(error) => log::warn!("own-driver manager recovery unavailable: {error:#}"),
+    }
+}
+
+pub fn finish_manager_recovery() {
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+    let marker = "/data/adb/ksu/.manager-recovery-pending";
+    let pending = fs::read_to_string(marker).ok();
+    let boot_id = fs::read_to_string("/proc/sys/kernel/random/boot_id").ok();
+    if pending.is_some() && pending == boot_id {
+        // Only called after Android boot completion. The bundled timeout bounds
+        // ActivityManager waiting; retain the marker if the command fails.
+        match std::process::Command::new(crate::assets::busybox_path())
+            .args([
+                "timeout",
+                "-s",
+                "KILL",
+                "10",
+                "/system/bin/am",
+                "force-stop",
+                "--user",
+                "all",
+                crate::defs::DEFAULT_PACKAGE_NAME,
+            ])
+            .status()
+        {
+            Ok(status) if status.success() => {
+                let _ = fs::remove_file(marker);
+            }
+            Ok(status) => log::warn!("manager force-stop failed: {status}"),
+            Err(error) => log::warn!("manager force-stop unavailable: {error}"),
+        }
+    } else if pending.is_some() {
+        let _ = fs::remove_file(marker);
     }
 }
 

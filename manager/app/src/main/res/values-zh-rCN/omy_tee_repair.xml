@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="omy_tee_repair_title">TEE 诊断与修复</string>
+    <string name="omy_tee_repair_read_only">诊断为只读操作。打开弹窗或刷新不会启动修复。启动属性仅为系统报告值，不代表硬件认证已通过。</string>
+    <string name="omy_tee_repair_diagnosing">正在读取引擎、keybox 与厂商工具状态…</string>
+    <string name="omy_tee_repair_yes">是</string>
+    <string name="omy_tee_repair_no">否</string>
+    <string name="omy_tee_repair_unknown">未知</string>
+    <string name="omy_tee_repair_engine">OMY 引擎：%1$s\n已启用：%2$s · PID：%3$d · 已注入：%4$s</string>
+    <string name="omy_tee_repair_keybox">存在 keybox：%1$s · %2$d 字节\nkeybox 校验通过：%3$s</string>
+    <string name="omy_tee_repair_targets">目标：%1$d · FORGE：%2$d · PATCH：%3$d · AUTO：%4$d</string>
+    <string name="omy_tee_repair_boot">报告的启动状态：%1$s\n刷写锁定：%2$s · 设备状态：%3$s</string>
+    <string name="omy_tee_repair_software_hint">OMY 软件恢复会拉取 keybox、释放并启动内置软件引擎、让外部副本让位，并请求开机自启。它不会重写厂商 TEE，也不代表硬件信任恢复。重启后的自启取决于守护进程支持情况。操作可能需要数分钟。</string>
+    <string name="omy_tee_repair_software_action">恢复 OMY 软件引擎</string>
+    <string name="omy_tee_repair_software_running">正在启动 OMY 软件恢复…</string>
+    <string name="omy_tee_repair_software_done">软件恢复步骤已通过，请查看刷新后的诊断。未重写厂商 TEE。</string>
+    <string name="omy_tee_repair_software_partial">软件恢复部分步骤需要处理，请逐项查看下方结果。未重写厂商 TEE。</string>
+    <string name="omy_tee_repair_failed">操作失败：%1$s</string>
+    <string name="omy_tee_repair_step_ok">通过 · %1$s\n%2$s</string>
+    <string name="omy_tee_repair_step_failed">需要处理 · %1$s\n%2$s</string>
+    <string name="omy_tee_repair_vendor_hint">厂商 TEE 写回是单独的操作，使用现有 KmInstallKeybox 接口和当前 keybox。接口会在调用厂商工具前重新检查 root、工具属主与权限、keybox 是否存在及 DeviceID。</string>
+    <string name="omy_tee_repair_vendor_absent">未发现通过检查的厂商工具，当前无厂商写回入口。</string>
+    <string name="omy_tee_repair_vendor_unusable">厂商工具未通过检查。</string>
+    <string name="omy_tee_repair_vendor_needs_keybox">厂商写回需要当前 keybox。</string>
+    <string name="omy_tee_repair_vendor_action">查看厂商 TEE 写回</string>
+    <string name="omy_tee_repair_vendor_confirm">将当前 keybox 写入厂商 TEE？这会改变安全硬件的密钥配置，在此设备上可能失败。接口会尝试备份 keybox 文件，但这不是 TEE 状态备份。工具退出成功不代表硬件认证已恢复。</string>
+    <string name="omy_tee_repair_vendor_confirm_action">将当前 keybox 写入厂商 TEE</string>
+    <string name="omy_tee_repair_vendor_running">正在执行厂商 TEE 写回…</string>
+    <string name="omy_tee_repair_vendor_done">厂商工具报告成功，尚未独立验证硬件认证。\n%1$s</string>
+    <string name="omy_tee_repair_cancel">取消写回</string>
+    <string name="omy_tee_repair_refresh">刷新只读诊断</string>
+    <string name="omy_tee_repair_close">关闭</string>
+</resources>

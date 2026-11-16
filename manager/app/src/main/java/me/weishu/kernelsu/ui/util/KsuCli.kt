@@ -52,9 +52,20 @@ data class FlashResult(val code: Int, val err: String, val showReboot: Boolean) 
     constructor(result: Shell.Result) : this(result, result.isSuccess)
 }
 
+// Actual own-driver capability, independent of the installation route and of
+// legacy/external KSU identity. Manager crowning can also happen after startup.
+private data class RootShellCapabilities(val ownXecAvailable: Boolean, val ownXecManager: Boolean)
+
+private fun rootShellCapabilities(): RootShellCapabilities {
+    val available = runCatching { Natives.version > 0 }.getOrDefault(false)
+    return RootShellCapabilities(available, available && runCatching { Natives.isManager }.getOrDefault(false))
+}
+
 private class RootShellSlot {
-    var shell: Shell? = null
-    var retryAtElapsedMs: Long = 0
+    @Volatile var shell: Shell? = null
+    @Volatile var capabilities: RootShellCapabilities? = null
+    @Volatile var needsRefresh: Boolean = true
+    @Volatile var retryAtElapsedMs: Long = 0
 
     /**
      * 连续失败次数，用于退避。0 = 上次探测成功。
@@ -182,11 +193,25 @@ object KsuCli {
      */
     private fun getOrRetryShell(globalMnt: Boolean): Shell {
         val slot = if (globalMnt) globalMountSlot else normalSlot
+        val capabilities = rootShellCapabilities()
+        synchronized(shellLock) {
+            if (slot.capabilities != capabilities) {
+                slot.capabilities = capabilities
+                slot.needsRefresh = true
+                slot.retryAtElapsedMs = 0
+                slot.retryCount = 0
+            }
+        }
 
-        // ---- 快路径：不持锁 ----
+        // Retain a working shell for in-flight and new jobs while a capability
+        // change triggers promotion to the newly available own provider.
         val cached = slot.shell
         if (cached != null && cached.isAlive && cached.isRoot) {
-            _probeSettled.value = true
+            if (slot === normalSlot) {
+                _probeSettled.value = true
+                _rootReady.value = true
+            }
+            if (slot.needsRefresh) scheduleRefresh(slot, globalMnt)
             return cached
         }
 
@@ -216,13 +241,20 @@ object KsuCli {
             // 连 sh 都起不来：只能退回同步探测（真没别的选择）。
         }
 
-        return probeOnce(slot, globalMnt)
+        val result = probeOnce(slot, globalMnt)
+            ?: (slot.shell?.takeIf { it.isAlive } ?: Shell.Builder.create().build("sh"))
+        if (!result.isAlive || !result.isRoot || slot.needsRefresh) {
+            scheduleRefresh(slot, globalMnt)
+        }
+        return result
     }
 
     /**
      * 真探一次。慢操作（`createRootShell`）在**锁外**跑，绝不让主线程为它排队。
      */
-    private fun probeOnce(slot: RootShellSlot, globalMnt: Boolean): Shell {
+    // Null means contention or a stale capability snapshot, not a failed attempt.
+    private fun probeOnce(slot: RootShellSlot, globalMnt: Boolean): Shell? {
+        val capabilities = rootShellCapabilities()
         val alreadyRunning = synchronized(shellLock) {
             if (slot.probing) {
                 true
@@ -231,19 +263,30 @@ object KsuCli {
                 false
             }
         }
-        if (alreadyRunning) {
-            // 已经有探测在跑：把现有壳交出去，别让调用方再等一次。
-            return slot.shell?.takeIf { it.isAlive } ?: Shell.Builder.create().build("sh")
-        }
+        if (alreadyRunning) return null
 
         val candidate = runCatching { createRootShell(globalMnt) }.getOrNull()
-        if (candidate == null) {
-            synchronized(shellLock) { slot.probing = false }
-            return slot.shell?.takeIf { it.isAlive } ?: Shell.Builder.create().build("sh")
-        }
-
+        val currentCapabilities = rootShellCapabilities()
         return synchronized(shellLock) {
             slot.probing = false
+            if (capabilities != currentCapabilities) {
+                // Do not publish an old probe after late load/crowning. This
+                // shell has never escaped to callers, so closing it is safe.
+                candidate?.let { runCatching { it.close() } }
+                slot.capabilities = currentCapabilities
+                slot.needsRefresh = true
+                slot.retryAtElapsedMs = 0
+                slot.retryCount = 0
+                return@synchronized null
+            }
+            slot.capabilities = capabilities
+            if (candidate == null) {
+                // Nothing usable came back (the provider threw or returned
+                // nothing). Keep whatever live shell we already have; the
+                // supervisor retries on its own schedule.
+                return@synchronized slot.shell?.takeIf { it.isAlive }
+                    ?: Shell.Builder.create().build("sh").also { slot.shell = it }
+            }
             applyProbeLocked(slot, candidate)
         }
     }
@@ -251,6 +294,7 @@ object KsuCli {
     /** Caller holds [shellLock]. 只做记账，不做任何慢操作。 */
     private fun applyProbeLocked(slot: RootShellSlot, candidate: Shell): Shell {
         _probeSettled.value = true
+        slot.needsRefresh = false
         val cached = slot.shell
         if (candidate.isAlive && candidate.isRoot) {
             slot.shell = candidate

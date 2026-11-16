@@ -123,6 +123,11 @@ build_tricky_store() {
     done
 }
 
+# Validate carrier scripts before embedding them in the userspace daemon.
+for script in "$BUILTIN/tricky_store/"*.sh; do
+    bash -n "$script"
+done
+
 build_ta_enhanced
 build_tricky_store
 

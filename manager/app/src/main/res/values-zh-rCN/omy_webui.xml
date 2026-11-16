@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="omy_webui_title">OMY 配置</string>
+    <string name="omy_webui_summary">运行状态、KeyMint 配置与应用作用域</string>
+    <string name="omy_webui_intro">Oh My Keymint 的管理器本地 WebUI。打开和刷新页面只读取运行状态，不会读取或展示密钥箱内容。</string>
+    <string name="omy_webui_refresh">刷新运行状态</string>
+    <string name="omy_webui_config_hint">原始 TOML：/data/misc/keystore/omk/config.toml。确认修改后再保存；此页面不校验 TOML 语法。保存时在同目录生成 config.toml.webui.bak，原子替换并设置属主 1017:1017、权限 0660。修改需要重启生效的设置后，请重启 KeyMint。</string>
+    <string name="omy_webui_targets_hint">作用域源文件：/data/adb/tricky_store/target.txt。每行一个包名，可保留原有注释、! / ? 后缀和可选密钥箱文件名。保存时生成 target.txt.webui.bak。承载服务约 15 秒内重新生成 injector.toml，监听器自动加载作用域；请刷新核对。</string>
+    <string name="omy_webui_injector_hint">自动生成的运行时注入配置，仅供查看。修改 scoop 请编辑上方 target.txt；直接修改此文件会被覆盖。</string>
+    <string name="omy_webui_save_config">保存 config.toml</string>
+    <string name="omy_webui_save_targets">保存 target.txt</string>
+    <string name="omy_webui_restart_keymint">重启 KeyMint</string>
+    <string name="omy_webui_restart_injector">重启注入器</string>
+    <string name="omy_webui_restart_all">重启两者</string>
+    <string name="omy_webui_restart_hint">重启按钮在 /data/adb/omk 创建请求标记，由运行服务处理；创建标记不代表重启成功。请先保存，再请求重启。重启可能短暂中断密钥证明。</string>
+    <string name="omy_webui_missing">只读：文件缺失、不可读、为符号链接或超过 128 KiB。此页面不会创建缺失的运行时文件。</string>
+    <string name="omy_webui_operation_failed">操作失败：可能未取得 root、运行文件不可访问或刷新后已被修改，也可能上次保存留下锁目录。请刷新后重试；当前没有确认写入或重启成功。</string>
+    <string name="omy_webui_loaded">运行状态已加载。只有点击保存按钮才会写入修改。</string>
+    <string name="omy_webui_config_saved">config.toml 已保存并备份。需要重启生效的设置请重启 KeyMint；尚未校验 TOML 语法。</string>
+    <string name="omy_webui_targets_saved">target.txt 已保存并备份。请等待约 15 秒后刷新，核对生成的 scoop。</string>
+    <string name="omy_webui_restart_requested">已请求重启。请稍后刷新，核对进程状态和待处理标记。</string>
+    <string name="omy_webui_busy">正在处理…</string>
+    <string name="omy_webui_confirm_restart">现在请求重启运行服务？未保存的编辑不会生效，密钥证明可能短暂中断。</string>
+    <string name="omy_webui_confirm_refresh">放弃未保存的编辑并重新读取运行文件？</string>
+</resources>

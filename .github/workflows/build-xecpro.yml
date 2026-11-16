@@ -538,6 +538,8 @@ jobs:
           "${BT}/apksigner" sign \
             --ks xecpro-key.jks --ks-key-alias xecpro-key \
             --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD \
+            --v1-signing-enabled false --v2-signing-enabled true \
+            --v3-signing-enabled false --v4-signing-enabled false \
             --out "$OUT" "${OUT}.aligned"
           "${BT}/apksigner" verify "$OUT"
           # 未签名原件别跟着上传，否则产物里两个同名 APK 分不清哪个能装。

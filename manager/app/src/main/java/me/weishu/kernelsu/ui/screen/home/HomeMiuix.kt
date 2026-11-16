@@ -418,6 +418,7 @@ private fun HomeHeroCard(
     }
     val modeText = when {
         external -> "KernelSU"
+        state.isLateLoadMode -> stringResource(R.string.jailbreak_mode)
         state.lkmMode == true -> "LKM"
         running -> stringResource(R.string.home_hero_kernel_mode)
         else -> stringResource(R.string.home_not_installed)

@@ -8,6 +8,7 @@ package me.weishu.kernelsu.ui.screen.tools
  * 2026-11-09（扁平方案 A）：六个入口收进**一张面板**，行与行之间只有 1px 发丝线，
  * 不再一组一张卡；评分卡从雷达改成"大数字 + 九格"。
  */
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -65,6 +66,7 @@ import me.weishu.kernelsu.ui.MainPagerBus
 import me.weishu.kernelsu.ui.navigation3.LocalNavigator
 import me.weishu.kernelsu.ui.navigation3.Route
 import me.weishu.kernelsu.ui.viewmodel.HomeViewModel
+import me.weishu.kernelsu.ui.webui.OmyWebUIActivity
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -95,6 +97,9 @@ fun ToolsScreen() {
     LaunchedEffect(Unit) { homeViewModel.refresh() }
 
     var showSuperkey by rememberSaveable { mutableStateOf(false) }
+    var showKernelVersion by rememberSaveable { mutableStateOf(false) }
+    var showTeeRepair by rememberSaveable { mutableStateOf(false) }
+    var showKeyboxPool by rememberSaveable { mutableStateOf(false) }
     var stealthOn by rememberSaveable { mutableStateOf(false) }
     var stealthBusy by rememberSaveable { mutableStateOf(false) }
     val showStealthConfirm = rememberSaveable { mutableStateOf(false) }
@@ -211,6 +216,34 @@ fun ToolsScreen() {
                             trailing = { Xc8Chevron() },
                         )
                         Xc8Row(
+                            title = stringResource(R.string.kernel_version_title),
+                            subtitle = stringResource(R.string.kernel_version_summary),
+                            leading = Icons.Rounded.Code,
+                            onClick = { showKernelVersion = true },
+                            trailing = { Xc8Chevron() },
+                        )
+                        Xc8Row(
+                            title = "TEE 修复",
+                            subtitle = "诊断密钥库并恢复 OMY 引擎",
+                            leading = Icons.Rounded.Key,
+                            onClick = { showTeeRepair = true },
+                            trailing = { Xc8Chevron() },
+                        )
+                        Xc8Row(
+                            title = "收集密钥池",
+                            subtitle = "获取上游密钥、查看时间并选择应用",
+                            leading = Icons.Rounded.Key,
+                            onClick = { showKeyboxPool = true },
+                            trailing = { Xc8Chevron() },
+                        )
+                        Xc8Row(
+                            title = stringResource(R.string.omy_webui_title),
+                            subtitle = stringResource(R.string.omy_webui_summary),
+                            leading = Icons.Rounded.Key,
+                            onClick = { context.startActivity(Intent(context, OmyWebUIActivity::class.java)) },
+                            trailing = { Xc8Chevron() },
+                        )
+                        Xc8Row(
                             title = stringResource(id = R.string.superkey_settings_title),
                             subtitle = stringResource(id = R.string.superkey_settings_summary),
                             leading = Icons.Rounded.Key,
@@ -242,6 +275,9 @@ fun ToolsScreen() {
         }
     }
 
+    if (showKernelVersion) KernelVersionDialog(onDismiss = { showKernelVersion = false })
+    if (showTeeRepair) TeeRepairDialog(onDismiss = { showTeeRepair = false })
+    if (showKeyboxPool) KeyboxPoolDialog(onDismiss = { showKeyboxPool = false })
     if (showSuperkey) {
         SuperkeyDialog(onDismiss = { showSuperkey = false })
     }

@@ -20,9 +20,8 @@ object TeeEngineStartup {
     fun isInjected(): Boolean? {
         val result = runCatching {
             getRootShell().newJob().add(
-                "KS=\$(pidof keystore2 2>/dev/null); I=1; [ -n \"\$KS\" ] || I=0; " +
-                    "for K in \$KS; do grep -q libTEESimulator /proc/\$K/maps 2>/dev/null || I=0; done; " +
-                    "echo injected=\$I",
+                "if sh /data/adb/ksu/builtin/tricky_store/injection-status.sh; " +
+                    "then echo injected=1; else echo injected=0; fi",
             ).to(ArrayList<String>(), ArrayList<String>()).exec()
         }.getOrNull() ?: return null
         if (!result.isSuccess) return null

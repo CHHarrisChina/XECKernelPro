@@ -22,6 +22,7 @@ pub fn on_post_fs_data() -> Result<()> {
         return Ok(());
     }
     if !mount_state {
+        ksucalls::recover_manager_at_boot();
         if let Err(e) = ksucalls::ensure_uapi_version_matched() {
             error!("{e:#}, skip on_post_fs_data");
             return Ok(());
@@ -79,9 +80,9 @@ pub fn on_post_fs_data() -> Result<()> {
 
     assets::ensure_binaries(true).with_context(|| "Failed to extract bin assets")?;
 
-    crate::hot_install::clean_trash();
-
-    // if we are in safe mode, we should disable all modules
+    let module_mutation_lock = crate::module::lock_install_mutations()?;
+    // Safe mode must disable the installed modules even if recovery needs
+    // manual intervention. The mutation lock is already held.
     if safe_mode {
         warn!("safe mode, skip post-fs-data scripts and disable all modules!");
         if let Err(e) = crate::module::disable_all_modules() {
@@ -89,6 +90,9 @@ pub fn on_post_fs_data() -> Result<()> {
         }
         return Ok(());
     }
+    crate::module::recover_install_guards()
+        .context("install recovery failed; refusing partial module startup")?;
+    crate::hot_install::clean_trash();
 
     // Clear Zygisk Next's failure leftovers (disable + .abort_msg) so that a
     // failed daemon start on a previous boot cannot keep Zygisk disabled here.
@@ -135,6 +139,8 @@ pub fn on_post_fs_data() -> Result<()> {
     if !mount_state && let Err(e) = crate::module::regenerate_preinit() {
         warn!("regenerate preinit failed: {e:#}");
     }
+
+    drop(module_mutation_lock);
 
     if let Err(e) = restorecon::restorecon() {
         warn!("restorecon failed: {e}");
@@ -190,13 +196,8 @@ pub fn on_post_fs_data() -> Result<()> {
         warn!("load system.prop failed: {e}");
     }
 
-    // execute metamodule mount script；没装 metamodule 时退到内置 magic mount 引擎
-    if metamodule::has_metamodule() {
-        if let Err(e) = metamodule::exec_mount_script(module_dir) {
-            warn!("execute metamodule mount failed: {e}");
-        }
-    } else if let Err(e) = mount_modules_magic_fallback() {
-        warn!("magic mount failed: {e}");
+    if let Err(e) = mount_modules(module_dir) {
+        warn!("mount modules failed: {e}");
     }
 
     run_stage("post-mount", wait);
@@ -204,6 +205,16 @@ pub fn on_post_fs_data() -> Result<()> {
     std::env::set_current_dir("/").with_context(|| "failed to chdir to /")?;
 
     Ok(())
+}
+
+/// Use the same mounting provider for boot and late-load. Never fall back
+/// after a provider fails: it may already have mounted part of the tree.
+pub fn mount_modules(module_dir: &str) -> Result<()> {
+    if metamodule::has_metamodule() {
+        metamodule::exec_mount_script(module_dir)
+    } else {
+        mount_modules_magic_fallback()
+    }
 }
 
 /// 没有 metamodule 时的兜底：用内置 magic mount 引擎把 `/data/adb/modules/*` 映射到真实根
@@ -268,6 +279,12 @@ fn mount_modules_magic_fallback() -> Result<()> {
 
 pub fn run_stage(stage: &str, wait: ScriptWait) {
     utils::umask(0);
+    if crate::module::module_startup_blocked() {
+        warn!(
+            "module startup blocked for this boot after install recovery failure; skipping {stage}"
+        );
+        return;
+    }
 
     // 「重启后强制自启」：用户点过强制修复就等于明确说了"我要引擎起来"。这个开关
     // 打开时，即使下面的闸门会让整个 stage 让位（Magisk 残留 / 安全模式），也要把
@@ -357,6 +374,10 @@ pub fn on_boot_completed_soft() {
 }
 
 fn run_boot_completed(commit_boot_txn: bool) {
+    if utils::getprop("sys.boot_completed").is_none_or(|value| value.trim() != "1") {
+        warn!("Android has not completed boot; keeping module boot guards armed");
+        return;
+    }
     // 挂载态没有内核驱动：boot 事务与 UAPI 校验都跳过，但 boot-completed 阶段
     // 脚本必须照跑（模块靠它收尾）。
     let mount_state = utils::is_mount_state();
@@ -367,11 +388,14 @@ fn run_boot_completed(commit_boot_txn: bool) {
             // 这里用中间绑定保持语义不变且不触发该 lint。
             let committed = crate::boot_txn::commit_boot_success();
             if let Err(e) = committed {
-                error!("boot transaction commit failed: {e:#}; refusing boot-completed stages");
-                return;
+                // Keep the failed transaction armed for rollback, but still
+                // deliver the lifecycle hook to modules already started.
+                error!("boot transaction commit failed: {e:#}; transaction remains pending");
             }
         }
 
+        ksucalls::recover_manager_at_boot();
+        ksucalls::finish_manager_recovery();
         if let Err(e) = ksucalls::ensure_uapi_version_matched() {
             error!("{e:#}, skip on_boot_completed");
             return;

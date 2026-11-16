@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="keybox_pool_title">Keybox 密钥池</string>
+    <string name="keybox_pool_limits">自动从两个固定上游源获取最多 10 份不同的 keybox。选中后点击应用，通过现有导入命令替换软件引擎的 keybox，不会向硬件 TEE 烧录。吊销状态和证明服务接受情况未知，证书日期不能证明这些状态。应用后暂停后台自动换密钥，以保留你的选择。总使用人数：未知（没有通用公开查询接口）。</string>
+    <string name="keybox_pool_loading">正在获取并校验上游 keybox…</string>
+    <string name="keybox_pool_count">可用：%1$d / 10 份不同 keybox。上游实际发布数量可能少于 10。</string>
+    <string name="keybox_pool_row">%1$s %2$s · %3$d 把密钥</string>
+    <string name="keybox_pool_fetched">获取时间：%1$s</string>
+    <string name="keybox_pool_modified">源更新时间（HTTP Last-Modified）：%1$s</string>
+    <string name="keybox_pool_window">证书有效窗口：%1$s 至 %2$s（整条证书链最早到期时间）</string>
+    <string name="keybox_pool_checked">本地校验通过：XML、私钥匹配、证书链签名、证书日期。根证书信任和吊销状态尚未确认。</string>
+    <string name="keybox_pool_unknown">未知</string>
+    <string name="keybox_pool_apply">应用所选</string>
+    <string name="keybox_pool_applying">正在应用…</string>
+    <string name="keybox_pool_close">关闭</string>
+    <string name="keybox_pool_applied">导入成功。命令已校验 keybox，原文件存在时已备份。这不代表硬件证明服务会接受此 keybox。</string>
+    <string name="keybox_pool_apply_failed">导入失败或证书日期已变化。请检查 root 授权、已安装的 ta-enhanced 命令、校验所需的网络和设备时间。这里不会展示命令原始输出或私钥。</string>
+    <string name="keybox_pool_fetch_failed">获取密钥池失败，请检查网络和设备时间。</string>
+</resources>

@@ -338,10 +338,24 @@ static int ksu_get_driver_fd(void)
 
     /* The KSU reboot kprobe writes the installed anon fd back into *arg. */
     sys_reboot(KSU_INSTALL_MAGIC1, KSU_INSTALL_MAGIC2, 0, &fd);
-    if (fd >= 0)
-        ksu_driver_fd = fd;
-    else
+    if (fd >= 0) {
+        char link[64], target[64];
+        long n;
+
+        snprintf(link, sizeof(link), "/proc/self/fd/%d", fd);
+        n = syscall(__NR_readlinkat, AT_FDCWD, link, target, sizeof(target) - 1);
+        if (n > 0 && n < (long)sizeof(target)) {
+            target[n] = '\0';
+            if (!strcmp(target, "anon_inode:[xecpro_driver]"))
+                ksu_driver_fd = fd;
+        }
+        if (ksu_driver_fd < 0) {
+            klog("foreign or incompatible driver: refusing symbol binding");
+            close(fd);
+        }
+    } else {
         klog("ksu driver fd unavailable, insmod cannot bind non-exported symbols");
+    }
     return ksu_driver_fd;
 }
 

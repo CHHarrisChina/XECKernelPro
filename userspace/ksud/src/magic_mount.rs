@@ -455,12 +455,35 @@ mod imp {
                 return Ok(());
             };
             let system = module_dir.join("system");
-            if !system.is_dir() {
+            if module_dir.join("skip_mount").exists() || !system.is_dir() {
                 return Ok(());
             }
             info!("magic mount: 收集模块 {name}");
             modules.push(name.to_string());
-            root.collect(&system, Path::new("/system"))?;
+            if let FsNode::Directory { children } = &mut root {
+                children
+                    .entry(OsString::from("system"))
+                    .or_insert_with(FsNode::new_dir)
+                    .collect(&system, Path::new("/system"))?;
+                // installer.sh moves partition payloads next to system and
+                // leaves system/<partition> as a relative symlink.
+                if let Some(FsNode::Directory { children: sys }) =
+                    children.get_mut(OsStr::new("system"))
+                {
+                    for part in SECONDARY_PARTITIONS {
+                        let source = module_dir.join(part);
+                        if source.is_dir() {
+                            let node = sys
+                                .entry(OsString::from(part))
+                                .or_insert_with(FsNode::new_dir);
+                            if matches!(node, FsNode::Symlink { .. }) {
+                                *node = FsNode::new_dir();
+                            }
+                            node.collect(&source, &Path::new("/system").join(part))?;
+                        }
+                    }
+                }
+            }
             Ok(())
         })?;
 
@@ -482,7 +505,13 @@ mod imp {
             let mut hoisted = Vec::new();
             for part in SECONDARY_PARTITIONS {
                 if let Some(node) = sys.remove(OsStr::new(part)) {
-                    if Path::new("/").join(part).is_dir() {
+                    let separate = Path::new("/").join(part);
+                    let system_path = Path::new("/system").join(part);
+                    let same_partition = fs::canonicalize(&separate)
+                        .ok()
+                        .zip(fs::canonicalize(&system_path).ok())
+                        .is_some_and(|(outside, inside)| outside == inside);
+                    if same_partition {
                         hoisted.push((part.to_string(), node));
                     } else {
                         sys.insert(OsString::from(part), node);
@@ -532,7 +561,8 @@ pub fn cli_magic_mount(work: Option<PathBuf>, dry_run: bool) -> Result<()> {
         if dry_run {
             let mut names = Vec::new();
             crate::module::foreach_module(crate::module::ModuleType::Active, |dir| {
-                if dir.join("system").is_dir()
+                if !dir.join("skip_mount").exists()
+                    && dir.join("system").is_dir()
                     && let Some(name) = dir.file_name().and_then(|n| n.to_str())
                 {
                     names.push(name.to_string());

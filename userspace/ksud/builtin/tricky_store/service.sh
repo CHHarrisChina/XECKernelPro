@@ -145,7 +145,7 @@ VER=$(sed -n 's/^versionCode=//p' "$MODPATH/module.prop" 2>/dev/null)
 CUR=$(cat "$RUNTIME/.engine_version" 2>/dev/null)
 need_stage=0
 [ "$CUR" = "$VER $ENGINE_ID" ] || need_stage=1
-for f in daemon daemon-injector libs/arm64-v8a/keymint libs/arm64-v8a/inject; do
+for f in daemon daemon-injector libs/arm64-v8a/keymint libs/arm64-v8a/inject LICENSE.1 LICENSE.2 AOSP.Apache-license-2.0.txt README.md; do
     [ -f "$ENGINE/$f" ] || { need_stage=1; break; }
     if command -v cmp >/dev/null 2>&1; then
         cmp -s "$MODPATH/engine/$f" "$ENGINE/$f" || { need_stage=1; break; }
@@ -166,6 +166,9 @@ if [ "$need_stage" = 1 ]; then
         stage_file "$MODPATH/engine/libs/arm64-v8a/$f" "$STAGE_DIR/libs/arm64-v8a/$f" 755 || {
             rm -rf "$STAGE_DIR"; exit 1
         }
+    done
+    for f in LICENSE.1 LICENSE.2 AOSP.Apache-license-2.0.txt README.md; do
+        stage_file "$MODPATH/engine/$f" "$STAGE_DIR/$f" 644 || { rm -rf "$STAGE_DIR"; exit 1; }
     done
     rm -rf "$ENGINE"
     mv -f "$STAGE_DIR" "$ENGINE" || { rm -rf "$STAGE_DIR"; exit 1; }
@@ -193,6 +196,20 @@ if [ "$_omk_uid" != "1017" ]; then
     chown 1017:1017 "$OMK" "$OMK/logs" 2>/dev/null || \
         log_line "WARN omk: chown 1017 failed (owner=$_omk_uid); engine may not read keybox"
 fi
+
+# Upstream wrappers prefer these global override files. Preserve them before
+# selecting our pinned payload; never silently execute a stale external build.
+for f in keymint inject; do
+    if [ -e "$OMK_STATE/$f" ] || [ -L "$OMK_STATE/$f" ]; then
+        backup="$OMK_STATE/$f.pre-xec"
+        if [ -e "$backup" ] || [ -L "$backup" ]; then
+            log_line "ERROR existing override backup at $backup; refusing to overwrite"
+            exit 1
+        fi
+        mv "$OMK_STATE/$f" "$backup" || exit 1
+        log_line "INFO preserved upstream binary override at $backup"
+    fi
+done
 
 # ---------------------------------------------------------------------------
 # keybox：真源 $RUNTIME/keybox.xml，镜像到 omk（OMY 读的那份）

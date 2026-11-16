@@ -36,6 +36,12 @@ import me.weishu.kernelsu.data.theme.StoreTheme
 import me.weishu.kernelsu.ui.component.RemotePreview
 import me.weishu.kernelsu.ui.component.dialog.XDialog
 import me.weishu.kernelsu.ui.design.token.Xc
+import me.weishu.kernelsu.ui.design.panel.Xc8Panel
+import me.weishu.kernelsu.ui.design.panel.Xc8Row
+import me.weishu.kernelsu.ui.design.panel.Xc8Chevron
+import me.weishu.kernelsu.ui.navigation3.LocalNavigator
+import me.weishu.kernelsu.ui.navigation3.Route
+import androidx.compose.material.icons.rounded.Wallpaper
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
@@ -52,7 +58,16 @@ import me.weishu.kernelsu.ui.design.token.XcRadius
  */
 @Composable
 fun StoreLibraryPage(state: StoreState, actions: StoreActions) {
+    val navigator = LocalNavigator.current
     Column(modifier = Modifier.fillMaxSize()) {
+        Xc8Panel(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+            Xc8Row(
+                title = stringResource(R.string.settings_wallpaper),
+                leading = Icons.Rounded.Wallpaper,
+                onClick = { navigator.push(Route.Wallpaper) },
+                trailing = { Xc8Chevron() },
+            )
+        }
         PublishEntry(themeCount = state.localThemeCount, onClick = actions.openPublish)
         SourceEntry(state = state, onClick = actions.openSourceDialog)
         StoreChipsRow(

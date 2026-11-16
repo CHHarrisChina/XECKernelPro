@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="kernel_version_title">内核版本</string>
+    <string name="kernel_version_summary">修改 SUSFS 对外显示的内核发行版本和构建版本</string>
+    <string name="kernel_version_hint">留空可恢复该项默认值。每项须少于 65 个 UTF-8 字节，需要内核支持 SUSFS uname 功能。</string>
+    <string name="kernel_version_release">内核发行版本（uname -r）</string>
+    <string name="kernel_version_build_time">构建版本（uname -v）</string>
+    <string name="kernel_version_auto_start">开机自动应用</string>
+    <string name="kernel_version_apply">应用并保存</string>
+    <string name="kernel_version_loading">正在读取已保存的设置…</string>
+    <string name="kernel_version_saving">正在应用并保存…</string>
+    <string name="kernel_version_invalid">每项须少于 65 个 UTF-8 字节，且不得包含换行或空字符。</string>
+    <string name="kernel_version_root_required">需要 Root 权限。</string>
+    <string name="kernel_version_load_failed">读取设置失败，请关闭后重新打开以重试。</string>
+    <string name="kernel_version_apply_failed">应用内核版本失败。</string>
+    <string name="kernel_version_save_failed">内核版本已应用，但设置未全部保存，请重试以保存所有设置。</string>
+    <string name="kernel_version_applied">内核版本已应用，设置已保存。</string>
+</resources>

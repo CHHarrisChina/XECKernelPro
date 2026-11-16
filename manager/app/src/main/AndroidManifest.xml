@@ -65,6 +65,13 @@
             android:taskAffinity="${applicationId}.webui"
             android:theme="@style/Theme.XecPro.WebUI" />
 
+        <activity
+            android:name="me.weishu.kernelsu.ui.webui.OmyWebUIActivity"
+            android:exported="false"
+            android:label="@string/omy_webui_title"
+            android:theme="@style/Theme.XecPro.WebUI"
+            android:windowSoftInputMode="adjustResize" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

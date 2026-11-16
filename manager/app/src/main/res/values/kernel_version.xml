@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="kernel_version_title">Kernel version</string>
+    <string name="kernel_version_summary">Change the kernel release and build version reported by SUSFS</string>
+    <string name="kernel_version_hint">Leave a field empty to restore its default value. Each field must contain fewer than 65 UTF-8 bytes. Requires SUSFS uname support.</string>
+    <string name="kernel_version_release">Kernel release (uname -r)</string>
+    <string name="kernel_version_build_time">Build version (uname -v)</string>
+    <string name="kernel_version_auto_start">Apply on boot</string>
+    <string name="kernel_version_apply">Apply and save</string>
+    <string name="kernel_version_loading">Loading saved settings…</string>
+    <string name="kernel_version_saving">Applying and saving…</string>
+    <string name="kernel_version_invalid">Use fewer than 65 UTF-8 bytes per field, with no line breaks or null characters.</string>
+    <string name="kernel_version_root_required">Root access is required.</string>
+    <string name="kernel_version_load_failed">Failed to load saved settings. Close and reopen to retry.</string>
+    <string name="kernel_version_apply_failed">Failed to apply the kernel version.</string>
+    <string name="kernel_version_save_failed">The kernel version was applied, but saving did not complete. Retry to save all settings.</string>
+    <string name="kernel_version_applied">Kernel version applied and settings saved.</string>
+</resources>

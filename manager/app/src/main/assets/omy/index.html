@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'">
+<title>OMY</title><style>
+:root{color-scheme:light dark;font:16px system-ui,sans-serif;background:#f6f7fa;color:#202330}body{max-width:900px;margin:auto;padding:24px 18px 48px}h1{margin-top:0}section{background:#fff;padding:18px;border-radius:16px;margin:18px 0}p{line-height:1.5}textarea{box-sizing:border-box;width:100%;min-height:240px;padding:12px;border:1px solid #8b90a0;border-radius:8px;font:13px monospace;tab-size:2;background:transparent;color:inherit}textarea[readonly]{opacity:.7}button{padding:12px 16px;margin:6px 8px 6px 0;border:0;border-radius:10px;background:#365ad5;color:#fff;font:inherit}button:disabled{opacity:.45}pre{white-space:pre-wrap;overflow-wrap:anywhere}#message{padding:12px;border:1px solid #8b90a0;border-radius:10px}.error{color:#c33}small{display:block;margin-bottom:10px} @media(prefers-color-scheme:dark){:root{background:#12141b;color:#e8eaf0}section{background:#20232e}.error{color:#ffa29c}}
+</style></head><body>
+<h1 data-label="title">OMY</h1><p data-label="intro">Local runtime configuration. Loading…</p>
+<p id="message" role="status" aria-live="polite">Loading…</p>
+<button id="refresh" data-label="refresh" disabled>Refresh</button><pre id="status"></pre>
+<section><h2>config.toml</h2><p data-label="configHint"></p><small id="configState"></small><textarea id="config" spellcheck="false" readonly aria-label="config.toml"></textarea><button id="saveConfig" data-label="saveConfig" disabled>Save config.toml</button></section>
+<section><h2>target.txt</h2><p data-label="targetsHint"></p><small id="targetsState"></small><textarea id="targets" spellcheck="false" readonly aria-label="target.txt"></textarea><button id="saveTargets" data-label="saveTargets" disabled>Save target.txt</button></section>
+<section><h2>injector.toml</h2><p data-label="injectorHint"></p><small id="injectorState"></small><textarea id="injector" spellcheck="false" readonly aria-label="injector.toml (read only)"></textarea></section>
+<section><p data-label="restartHint"></p><button id="restartKeymint" data-label="restartKeymint" disabled>Restart KeyMint</button><button id="restartInjector" data-label="restartInjector" disabled>Restart injector</button><button id="restartAll" data-label="restartAll" disabled>Restart both</button></section>
+<script>
+'use strict';
+let sequence=0,pending=null,labels={},available={},baseline={},busy=false;
+const byId=id=>document.getElementById(id);
+const editors=['config','targets'];
+function controls(){
+ document.querySelectorAll('button').forEach(button=>button.disabled=busy);
+ editors.forEach(name=>{byId(name).readOnly=busy||!available[name];byId(name==='config'?'saveConfig':'saveTargets').disabled=busy||!available[name]||byId(name).value===baseline[name];});
+}
+function request(action,payload=''){
+ if(busy)return;
+ busy=true;pending={id:++sequence,action};controls();byId('message').className='';byId('message').textContent=labels.busy||'Loading…';
+ try{Omy.request(sequence,action,payload);}catch(error){busy=false;pending=null;byId('message').className='error';byId('message').textContent=labels.failed||'Read-only: native service unavailable. Close and reopen this page.';available={};controls();}
+}
+window.omyReply=function(id,json){
+ if(!pending||id!==pending.id)return;
+ const action=pending.action;pending=null;busy=false;
+ const reply=JSON.parse(json);labels=reply.labels||labels;
+ document.querySelectorAll('[data-label]').forEach(element=>{const value=labels[element.dataset.label];if(value)element.textContent=value;});
+ byId('message').className=reply.ok?'':'error';byId('message').textContent=reply.message;
+ if(action==='load'){
+  ['config','targets','injector'].forEach(name=>{available[name]=reply.ok&&typeof reply[name]==='string';const value=available[name]?reply[name]:'';byId(name).value=value;baseline[name]=value;byId(name+'State').textContent=available[name]?'':labels.missing;});
+  byId('status').textContent=reply.status||'';
+ }else if(reply.ok&&action==='saveConfig'){baseline.config=byId('config').value;}
+ else if(reply.ok&&action==='saveTargets'){baseline.targets=byId('targets').value;}
+ controls();
+};
+editors.forEach(name=>byId(name).addEventListener('input',controls));
+byId('refresh').onclick=()=>{if(editors.some(name=>byId(name).value!==baseline[name])&&!confirm(labels.confirmRefresh))return;request('load');};
+byId('saveConfig').onclick=()=>request('saveConfig',byId('config').value);
+byId('saveTargets').onclick=()=>request('saveTargets',byId('targets').value);
+['restartKeymint','restartInjector','restartAll'].forEach(action=>byId(action).onclick=()=>{if(confirm(labels.confirmRestart))request(action);});
+request('load');
+</script></body></html>

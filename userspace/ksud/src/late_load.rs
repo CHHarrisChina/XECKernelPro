@@ -5,7 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::{process::Command, time::Instant};
 
 use crate::module::{ScriptWait, handle_updated_modules, prune_modules};
-use crate::{assets, defs, init_event, metamodule, restorecon, utils};
+use crate::{assets, defs, init_event, restorecon, utils};
 
 fn dump_process_info(label: &str) {
     use rustix::process::{getgid, getgroups, getpid, getuid};
@@ -50,8 +50,12 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Res
     info!("Detected KMI: {kmi}");
 
     // 2. Check if KernelSU is already loaded
-    if ksuinit::has_kernelsu() {
-        info!("KernelSU already loaded, skip loading ko");
+    if crate::ksucalls::probe_own_driver() {
+        info!("Own XEC driver already loaded, skip loading ko");
+    } else if ksuinit::has_kernelsu() {
+        anyhow::bail!(
+            "A foreign KernelSU driver is active; refusing XEC late-load or routing through it"
+        );
     } else {
         // 3. Get kernelsu.ko from embedded assets
         let ko_name = format!("{kmi}_kernelsu.ko");
@@ -70,6 +74,8 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Res
         info!("kernelsu.ko loaded successfully!");
         dump_process_info("after load_module");
     }
+
+    crate::ksucalls::recover_manager_at_boot();
 
     // 4b. SUSFS：随 xudc 发布的第三方 LKM（third_party/susfs4ksu-lkm）。
     //
@@ -91,6 +97,8 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Res
 
     utils::install(None, None).context("Failed to install ksud")?;
 
+    let module_mutation_lock = crate::module::lock_install_mutations()?;
+    crate::module::recover_install_guards().context("late-load install recovery failed")?;
     crate::hot_install::clean_trash();
 
     // Late-load bypasses on_post_data_fs, so apply the same direct-flash
@@ -130,6 +138,8 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Res
         warn!("prune modules failed: {e}");
     }
 
+    drop(module_mutation_lock);
+
     if let Err(e) = restorecon::restorecon() {
         warn!("restorecon failed: {e}");
     }
@@ -158,9 +168,9 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Res
         warn!("load system.prop failed: {e}");
     }
 
-    // 10. Execute metamodule mount script (OverlayFS)
-    if let Err(e) = metamodule::exec_mount_script(defs::MODULE_DIR) {
-        warn!("execute metamodule mount failed: {e}");
+    // 10. Mount modules using the same provider selection as normal boot.
+    if let Err(e) = init_event::mount_modules(defs::MODULE_DIR) {
+        warn!("mount modules failed: {e}");
     }
 
     // 11. Execute post-mount stage scripts using the same deadline

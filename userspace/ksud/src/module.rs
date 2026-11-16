@@ -214,6 +214,11 @@ pub fn foreach_module(
             continue;
         }
 
+        if module_type == ModuleType::Updated
+            && path.file_name().is_some_and(staged_install_incomplete)
+        {
+            continue;
+        }
         if module_type == Active && path.join(defs::DISABLE_FILE_NAME).exists() {
             info!("{} is disabled, skip", path.display());
             continue;
@@ -626,6 +631,9 @@ fn next_boot_modules() -> BTreeMap<String, PathBuf> {
             let Some(id) = module_path.file_name().and_then(|s| s.to_str()) else {
                 continue;
             };
+            if src_dir == MODULE_UPDATE_DIR && staged_install_incomplete(std::ffi::OsStr::new(id)) {
+                continue;
+            }
             let id = id.to_string();
             if module_path.join(defs::DISABLE_FILE_NAME).exists()
                 || module_path.join(defs::REMOVE_FILE_NAME).exists()
@@ -727,6 +735,266 @@ pub fn regenerate_preinit() -> Result<()> {
     rc.and(preinit)
 }
 
+// External to MODPATH, which installer.sh deletes. Caller serializes mutations.
+const INSTALL_GUARD_ROOT: &str = "/data/adb/ksu/install_guard";
+pub struct InstallMutationLock(std::fs::File);
+pub fn lock_install_mutations() -> Result<InstallMutationLock> {
+    use std::os::{fd::AsRawFd, unix::fs::OpenOptionsExt};
+    std::fs::create_dir_all(INSTALL_GUARD_ROOT)?;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(Path::new(INSTALL_GUARD_ROOT).join(".lock"))?;
+    ensure!(
+        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
+        "module mutation busy: {}",
+        std::io::Error::last_os_error()
+    );
+    Ok(InstallMutationLock(file))
+}
+impl Drop for InstallMutationLock {
+    fn drop(&mut self) {
+        use std::os::fd::AsRawFd;
+        if unsafe { libc::flock(self.0.as_raw_fd(), libc::LOCK_UN) } != 0 {
+            warn!("module unlock failed: {}", std::io::Error::last_os_error());
+        }
+    }
+}
+const INSTALL_META: [&str; 4] = ["module.prop", "disable", "remove", "update"];
+fn guard_exists(path: &Path) -> Result<bool> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e.into()),
+    }
+}
+fn retire_guard(dir: &Path) -> Result<()> {
+    let gc = dir.with_file_name(format!(
+        ".gc-{}",
+        dir.file_name().unwrap().to_string_lossy()
+    ));
+    ensure!(
+        !guard_exists(&gc)?,
+        "unresolved guard cleanup: {}",
+        gc.display()
+    );
+    rename(dir, &gc)?;
+    remove_dir_all(gc)?;
+    Ok(())
+}
+fn restore_install_guard(dir: &Path, stage: &Path, live: &Path) -> Result<()> {
+    if guard_exists(&dir.join("done"))? || !guard_exists(&dir.join("prepared"))? {
+        return retire_guard(dir);
+    }
+    ensure!(
+        !guard_exists(&dir.join("hot"))? || guard_exists(stage)?,
+        "interrupted hot install; preserving live, backup and journal for manual recovery"
+    );
+    let pending = dir.join("pending");
+    if guard_exists(&pending)? {
+        if guard_exists(stage)? {
+            remove_dir_all(stage)?;
+        }
+        rename(pending, stage)?;
+    } else if !guard_exists(&dir.join("had-pending"))? && guard_exists(stage)? {
+        remove_dir_all(stage)?;
+    }
+    if guard_exists(&dir.join("had-live"))? {
+        ensure!(live.is_dir(), "old live missing; retaining install journal");
+        for name in INSTALL_META {
+            let dst = live.join(name);
+            if guard_exists(&dir.join(name))? {
+                ensure!(
+                    !std::fs::symlink_metadata(&dst).is_ok_and(|m| m.file_type().is_symlink()),
+                    "live metadata symlink"
+                );
+                copy(dir.join(name), dst)?;
+            } else if guard_exists(&dst)? {
+                std::fs::remove_file(dst)?;
+            }
+        }
+    } else if guard_exists(live)? {
+        // Never recursively delete a custom installer-created live tree.
+        ensure!(
+            std::fs::read_dir(live)?.all(|e| e.is_ok_and(|e| INSTALL_META
+                .iter()
+                .any(|n| e.file_name() == std::ffi::OsStr::new(n)))),
+            "unexpected live payload; retaining install journal"
+        );
+        for name in INSTALL_META {
+            if guard_exists(&live.join(name))? {
+                std::fs::remove_file(live.join(name))?;
+            }
+        }
+        std::fs::remove_dir(live)?;
+    }
+    retire_guard(dir)
+}
+struct InstallGuard {
+    dir: PathBuf,
+    stage: PathBuf,
+    live: PathBuf,
+    done: bool,
+}
+impl InstallGuard {
+    fn begin(id: &str, stage: PathBuf, live: PathBuf) -> Result<Self> {
+        std::fs::create_dir_all(INSTALL_GUARD_ROOT)?;
+        let dir = Path::new(INSTALL_GUARD_ROOT).join(id);
+        std::fs::create_dir(&dir).context("unresolved install journal; recover before retry")?;
+        let guard = Self {
+            dir,
+            stage,
+            live,
+            done: false,
+        };
+        if guard_exists(&guard.stage)? {
+            ensure_file_exists(guard.dir.join("had-pending"))?;
+        }
+        if guard_exists(&guard.live)? {
+            ensure_file_exists(guard.dir.join("had-live"))?;
+            for name in INSTALL_META {
+                let src = guard.live.join(name);
+                if guard_exists(&src)? {
+                    ensure!(
+                        std::fs::symlink_metadata(&src)?.is_file(),
+                        "non-file module metadata"
+                    );
+                    copy(src, guard.dir.join(name))?;
+                }
+            }
+        }
+        ensure_file_exists(guard.dir.join("prepared"))?;
+        if guard_exists(&guard.stage)? {
+            rename(&guard.stage, guard.dir.join("pending"))?;
+        }
+        Ok(guard)
+    }
+    fn commit(&mut self) -> Result<()> {
+        ensure_file_exists(self.dir.join("done"))?;
+        self.done = true;
+        // Failure here leaves a done journal, safe for later cleanup.
+        if let Err(e) = retire_guard(&self.dir) {
+            warn!("installed successfully; guard cleanup deferred: {e:#}");
+        }
+        Ok(())
+    }
+}
+impl Drop for InstallGuard {
+    fn drop(&mut self) {
+        if !self.done
+            && let Err(e) = restore_install_guard(&self.dir, &self.stage, &self.live)
+        {
+            warn!("install rollback retained for recovery: {e:#}");
+        }
+    }
+}
+fn staged_install_incomplete(id: &std::ffi::OsStr) -> bool {
+    let dir = Path::new(INSTALL_GUARD_ROOT).join(id);
+    guard_exists(&dir).unwrap_or(true) && !guard_exists(&dir.join("done")).unwrap_or(false)
+}
+fn recover_install_guards_inner() -> Result<()> {
+    std::fs::create_dir_all(INSTALL_GUARD_ROOT)?;
+    for entry in std::fs::read_dir(INSTALL_GUARD_ROOT)? {
+        let entry = entry?;
+        let id = entry.file_name();
+        if id == ".lock" {
+            continue;
+        }
+        ensure!(
+            entry.file_type()?.is_dir(),
+            "unexpected install journal entry"
+        );
+        if id == ".activation" {
+            for old in std::fs::read_dir(entry.path())? {
+                let old = old?;
+                let live = Path::new(MODULE_DIR).join(old.file_name());
+                if guard_exists(&live)? {
+                    warn!(
+                        "retaining ambiguous activation backup: {}",
+                        old.path().display()
+                    );
+                } else {
+                    rename(old.path(), live)?;
+                }
+            }
+            continue;
+        }
+        if id.to_string_lossy().starts_with(".gc-") {
+            remove_dir_all(entry.path())?;
+            continue;
+        }
+        validate_module_id(id.to_str().context("non-UTF8 install journal")?)?;
+        restore_install_guard(
+            &entry.path(),
+            &Path::new(MODULE_UPDATE_DIR).join(&id),
+            &Path::new(MODULE_DIR).join(&id),
+        )?;
+    }
+    Ok(())
+}
+const STARTUP_BLOCK: &str = "/data/adb/ksu/.module-startup-block";
+fn boot_id() -> Result<String> {
+    let id = std::fs::read_to_string("/proc/sys/kernel/random/boot_id")?;
+    ensure!(!id.trim().is_empty(), "empty boot id");
+    Ok(id.trim().to_owned())
+}
+/// A malformed or unreadable marker fails closed. Missing means no known failure.
+pub fn module_startup_blocked() -> bool {
+    match std::fs::read_to_string(STARTUP_BLOCK) {
+        Ok(marker) => boot_id().map_or(true, |current| {
+            marker.trim().is_empty() || marker.trim() == current
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => true,
+    }
+}
+/// Caller holds the module mutation lock. Publish a conservative block before
+/// recovery, then remove it only after recovery has completed successfully.
+pub fn recover_install_guards() -> Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    std::fs::create_dir_all(INSTALL_GUARD_ROOT)?;
+    let id = boot_id()?;
+    let mut marker = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(STARTUP_BLOCK)?;
+    marker.write_all(id.as_bytes())?;
+    marker.sync_all()?;
+    recover_install_guards_inner()?;
+    std::fs::remove_file(STARTUP_BLOCK)?;
+    Ok(())
+}
+fn activate_updated_module(stage: &Path, live: &Path) -> Result<()> {
+    let backup = Path::new(INSTALL_GUARD_ROOT).join(".activation");
+    std::fs::create_dir_all(&backup)?;
+    let backup = backup.join(live.file_name().context("module without id")?);
+    ensure!(!guard_exists(&backup)?, "unresolved activation backup");
+    let had_live = guard_exists(live)?;
+    if had_live {
+        rename(live, &backup)?;
+    }
+    if let Err(error) = rename(stage, live) {
+        if had_live {
+            rename(&backup, live).with_context(|| {
+                format!("activation failed: {error}; restoring old module also failed")
+            })?;
+        }
+        return Err(error.into());
+    }
+    if had_live {
+        remove_dir_all(backup)?;
+    }
+    Ok(())
+}
+
 pub fn handle_updated_modules() -> Result<()> {
     let modules_root = Path::new(MODULE_DIR);
     foreach_module(ModuleType::Updated, |updated_module| {
@@ -741,38 +1009,12 @@ pub fn handle_updated_modules() -> Result<()> {
             // (installer.sh + Rust cleanup) explicitly clears it, and carrying
             // it forward makes freshly-flashed modules appear "disabled by
             // default" — the user's #1 complaint about ZY modules.
-            let (removed, disabled) = if module_dir.exists() {
-                let r = module_dir.join(defs::REMOVE_FILE_NAME).exists();
-                // 2026-11-13 (audit F10): also remember an explicit user disable.
-                // Only the "remove" marker used to be carried over, so
-                // install -> disable -> reboot silently re-enabled the module
-                // (preinit honours either tree, the normal stage only the live
-                // one, so the two disagreed). A fresh install has no live dir at
-                // all, so the "new modules are enabled" default is untouched.
-                let d = module_dir.join(defs::DISABLE_FILE_NAME).exists();
-                remove_dir_all(&module_dir)?;
-                (r, d)
-            } else {
-                (false, false)
-            };
-            rename(updated_module, &module_dir)?;
-            if removed {
-                let path = module_dir.join(defs::REMOVE_FILE_NAME);
-                if let Err(e) = ensure_file_exists(&path) {
-                    warn!("Failed to create {}: {e}", path.display());
+            for marker in [defs::REMOVE_FILE_NAME, defs::DISABLE_FILE_NAME] {
+                if guard_exists(&module_dir.join(marker))? {
+                    ensure_file_exists(updated_module.join(marker))?;
                 }
             }
-            if disabled {
-                let path = module_dir.join(defs::DISABLE_FILE_NAME);
-                if let Err(e) = ensure_file_exists(&path) {
-                    warn!("Failed to keep {} disabled: {e}", path.display());
-                } else {
-                    info!(
-                        "kept user-disable for {} across the update",
-                        module_dir.display()
-                    );
-                }
-            }
+            activate_updated_module(updated_module, &module_dir)?;
         }
         Ok(())
     })?;
@@ -944,6 +1186,13 @@ fn install_module_to_system(zip: &str) -> Result<String> {
     ensure_dir_exists(defs::MODULE_UPDATE_DIR)?;
     setsyscon(defs::MODULE_UPDATE_DIR)?;
 
+    let _install_lock = lock_install_mutations()?;
+    recover_install_guards()?;
+    let mut install_guard = InstallGuard::begin(
+        module_id,
+        updated_dir.clone(),
+        Path::new(MODULE_DIR).join(module_id),
+    )?;
     // Prepare target directory
     println!("- Installing to {}", updated_dir.display());
     ensure_clean_dir(&updated_dir)?;
@@ -968,14 +1217,17 @@ fn install_module_to_system(zip: &str) -> Result<String> {
     println!("- Running module installer");
     exec_install_script(zip, is_metamodule, module_id)?;
 
+    ensure_file_exists(install_guard.dir.join("hot"))?;
     if let Some(request) = hot_install::take_request(&updated_dir)
         && hot_install::apply(module_id, is_metamodule, &request)
     {
+        install_guard.commit()?;
         println!("- Module installed successfully, no reboot required!");
         info!("Module {module_id} installed successfully!");
         return Ok(module_id.to_owned());
     }
 
+    std::fs::remove_file(install_guard.dir.join("hot"))?;
     let module_dir = Path::new(MODULE_DIR).join(module_id);
     // A metamodule doing its own hot install may have moved the marker into the live dir
     std::fs::remove_file(module_dir.join(defs::HOT_INSTALL_MARKER)).ok();
@@ -1016,6 +1268,7 @@ fn install_module_to_system(zip: &str) -> Result<String> {
         metamodule::ensure_symlink(&module_dir)?;
     }
 
+    install_guard.commit()?;
     println!("- Module installed successfully!");
     info!("Module {module_id} installed successfully!");
 

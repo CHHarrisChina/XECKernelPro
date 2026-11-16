@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="omy_tee_repair_title">TEE diagnosis and repair</string>
+    <string name="omy_tee_repair_read_only">Diagnosis is read-only. Opening this dialog or refreshing does not start a repair. Boot properties are reported values, not proof of hardware attestation.</string>
+    <string name="omy_tee_repair_diagnosing">Reading engine, keybox and vendor tool status…</string>
+    <string name="omy_tee_repair_yes">Yes</string>
+    <string name="omy_tee_repair_no">No</string>
+    <string name="omy_tee_repair_unknown">Unknown</string>
+    <string name="omy_tee_repair_engine">OMY engine: %1$s\nEnabled: %2$s · PID: %3$d · Injected: %4$s</string>
+    <string name="omy_tee_repair_keybox">Keybox present: %1$s · %2$d bytes\nKeybox validation passed: %3$s</string>
+    <string name="omy_tee_repair_targets">Targets: %1$d · FORGE: %2$d · PATCH: %3$d · AUTO: %4$d</string>
+    <string name="omy_tee_repair_boot">Reported boot state: %1$s\nFlash locked: %2$s · Device state: %3$s</string>
+    <string name="omy_tee_repair_software_hint">OMY software restoration fetches a keybox, restores and starts the bundled software engine, gives it priority over external copies, and requests automatic startup. It does not rewrite the vendor TEE or restore hardware trust. Startup after reboot depends on daemon support. This can take several minutes.</string>
+    <string name="omy_tee_repair_software_action">Restore OMY software engine</string>
+    <string name="omy_tee_repair_software_running">Starting OMY software restoration…</string>
+    <string name="omy_tee_repair_software_done">Software restoration steps passed. Review the refreshed diagnosis. Vendor TEE was not rewritten.</string>
+    <string name="omy_tee_repair_software_partial">Software restoration returned steps that need attention. Review each result below. Vendor TEE was not rewritten.</string>
+    <string name="omy_tee_repair_failed">Operation failed: %1$s</string>
+    <string name="omy_tee_repair_step_ok">Passed · %1$s\n%2$s</string>
+    <string name="omy_tee_repair_step_failed">Needs attention · %1$s\n%2$s</string>
+    <string name="omy_tee_repair_vendor_hint">Vendor TEE writeback is a separate operation. It uses the existing KmInstallKeybox API and the current keybox. The API rechecks root, tool ownership and permissions, keybox presence and DeviceID before invoking the vendor tool.</string>
+    <string name="omy_tee_repair_vendor_absent">No checked vendor tool is available. Vendor writeback is unavailable.</string>
+    <string name="omy_tee_repair_vendor_unusable">Vendor tool checks did not pass.</string>
+    <string name="omy_tee_repair_vendor_needs_keybox">Vendor writeback requires a current keybox.</string>
+    <string name="omy_tee_repair_vendor_action">Review vendor TEE writeback</string>
+    <string name="omy_tee_repair_vendor_confirm">Write the current keybox into the vendor TEE? This changes secure hardware provisioning and may fail on this device. The API attempts a backup of the keybox file; that is not a backup of TEE state. A successful tool exit does not prove hardware attestation is restored.</string>
+    <string name="omy_tee_repair_vendor_confirm_action">Write current keybox to vendor TEE</string>
+    <string name="omy_tee_repair_vendor_running">Running vendor TEE writeback…</string>
+    <string name="omy_tee_repair_vendor_done">Vendor tool reported success. Hardware attestation has not been independently verified.\n%1$s</string>
+    <string name="omy_tee_repair_cancel">Cancel writeback</string>
+    <string name="omy_tee_repair_refresh">Refresh read-only diagnosis</string>
+    <string name="omy_tee_repair_close">Close</string>
+</resources>

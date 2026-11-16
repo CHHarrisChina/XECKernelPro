@@ -18,12 +18,24 @@
 #include <cerrno>
 #include <vector>
 #include <algorithm>
+#include <mutex>
+#include <fcntl.h>
 #include "ksu.h"
 
 static int fd = -1;
+static std::mutex driver_mutex;
+
+static bool is_own_driver(int candidate) {
+    char path[64];
+    char target[PATH_MAX];
+    snprintf(path, sizeof(path), "/proc/self/fd/%d", candidate);
+    ssize_t n = readlink(path, target, sizeof(target) - 1);
+    if (n < 0) return false;
+    target[n] = '\0';
+    return strcmp(target, "anon_inode:[xecpro_driver]") == 0;
+}
 
 static inline int scan_driver_fd() {
-    const char *kName = "[xecpro_driver]";
     DIR *dir = opendir("/proc/self/fd");
     if (!dir) {
         return -1;
@@ -52,59 +64,60 @@ static inline int scan_driver_fd() {
         }
         target[n] = '\0';
 
-        const char *base = strrchr(target, '/');
-        base = base ? base + 1 : target;
-
-        if (strstr(base, kName)) {
+        if (strcmp(target, "anon_inode:[xecpro_driver]") == 0 &&
+            (found < 0 || fd_long < found)) {
             found = (int)fd_long;
-            break;
         }
     }
 
     closedir(dir);
-    return found;
+    if (found < 0) return -1;
+    const int owned = fcntl(found, F_DUPFD_CLOEXEC, 0);
+    if (owned >= 0 && !is_own_driver(owned)) {
+        close(owned);
+        return -1;
+    }
+    return owned;
 }
 
 template<typename... Args>
 static int ksuctl(unsigned long op, Args &&... args) {
-
+    static_assert(sizeof...(Args) <= 1, "ioctl expects at most one extra argument");
+    // All JNI commands share the descriptor; serialize invalidation/recovery.
+    std::lock_guard<std::mutex> lock(driver_mutex);
+    if (fd >= 0 && !is_own_driver(fd)) {
+        // A reused numeric descriptor is no longer ours to close.
+        fd = -1;
+    }
     if (fd < 0) {
         fd = scan_driver_fd();
     }
-
-    static_assert(sizeof...(Args) <= 1, "ioctl expects at most one extra argument");
-
-    return ioctl(fd, op, std::forward<Args>(args)...);
+    if (fd < 0) {
+        errno = ENODEV;
+        return -1;
+    }
+    const int result = ioctl(fd, op, std::forward<Args>(args)...);
+    if (result < 0 && (errno == EBADF || errno == ENOTTY)) {
+        const int saved_errno = errno;
+        if (is_own_driver(fd)) close(fd);
+        fd = -1;
+        errno = saved_errno;
+    }
+    return result;
 }
 
-static struct ksu_get_info_cmd g_version {};
-
 struct ksu_get_info_cmd get_info() {
-    // 2026-11-13 (audit F17): `version`/`uapi_version` are build constants and
-    // may be cached, but `flags` carries KSU_FLAG_IS_MANAGER, which changes at
-    // runtime when the kernel crowns the manager. Caching the whole struct
-    // froze the first answer -- a manager that started before crowning got
-    // "not manager" and kept it forever, so no later rescan could recover the
-    // identity. Refresh the flags on every query, keep only the constants.
-    if (!g_version.version) {
-        if (ksuctl(KSU_IOCTL_GET_INFO, &g_version) < 0) {
-            ksuctl(KSU_IOCTL_GET_INFO_LEGACY, &g_version);
-            g_version.uapi_version = 0;
-        }
-        return g_version;
+    // Both version and flags depend on current manager identity. A cached
+    // compatibility version must not survive crowning or a lost connection.
+    struct ksu_get_info_cmd info {};
+    if (ksuctl(KSU_IOCTL_GET_INFO, &info) == 0) {
+        return info;
     }
-
-    struct ksu_get_info_cmd info = g_version;
-    info.flags = 0;
-    struct ksu_get_info_cmd fresh {};
-    if (ksuctl(KSU_IOCTL_GET_INFO, &fresh) == 0) {
-        info.flags = fresh.flags;
-    } else if (g_version.uapi_version == 0) {
-        // Legacy kernel: the old call has no flags either, but keep the path
-        // identical to the first query so behaviour does not depend on order.
-        ksuctl(KSU_IOCTL_GET_INFO_LEGACY, &fresh);
-        info.flags = fresh.flags;
+    info = {};
+    if (ksuctl(KSU_IOCTL_GET_INFO_LEGACY, &info) < 0) {
+        return {};
     }
+    info.uapi_version = 0;
     return info;
 }
 
@@ -137,7 +150,7 @@ bool is_lkm_mode() {
     if (info.version > 0) {
         return (info.flags & KSU_GET_INFO_FLAG_LKM) != 0;
     }
-    return (legacy_get_info().second & KSU_GET_INFO_FLAG_LKM) != 0;
+    return false;
 }
 
 bool is_lkm_bundled() {
@@ -159,7 +172,7 @@ bool is_manager() {
     if (info.version > 0) {
         return (info.flags & KSU_GET_INFO_FLAG_MANAGER) != 0;
     }
-    return legacy_get_info().first > 0;
+    return false;
 }
 
 bool is_pr_build() {

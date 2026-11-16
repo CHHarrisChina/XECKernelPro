@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="omy_webui_title">OMY configuration</string>
+    <string name="omy_webui_summary">Runtime status, KeyMint configuration and app scope</string>
+    <string name="omy_webui_intro">Manager local WebUI for Oh My Keymint. Opening or refreshing this page only reads runtime state. Keybox contents are never read or displayed.</string>
+    <string name="omy_webui_refresh">Refresh runtime state</string>
+    <string name="omy_webui_config_hint">Raw TOML: /data/misc/keystore/omk/config.toml. Save only when you intend to apply your edits. No TOML syntax validation is performed here. A backup is saved beside it as config.toml.webui.bak; replacement uses owner 1017:1017 and mode 0660. Restart KeyMint after changing settings that require a restart.</string>
+    <string name="omy_webui_targets_hint">Scope source: /data/adb/tricky_store/target.txt. Keep one package per line; existing comments, ! / ? suffixes and optional keybox filenames can remain. Saving creates target.txt.webui.bak. The carrier regenerates injector.toml within about 15 seconds and its watcher reloads scope; refresh to check.</string>
+    <string name="omy_webui_injector_hint">Read-only generated runtime injector configuration. Edit target.txt above to change scoop. Direct edits to this generated file would be overwritten.</string>
+    <string name="omy_webui_save_config">Save config.toml</string>
+    <string name="omy_webui_save_targets">Save target.txt</string>
+    <string name="omy_webui_restart_keymint">Restart KeyMint</string>
+    <string name="omy_webui_restart_injector">Restart injector</string>
+    <string name="omy_webui_restart_all">Restart both</string>
+    <string name="omy_webui_restart_hint">Restart buttons create a request marker in /data/adb/omk. The runtime service consumes the marker; this does not confirm a successful restart. Save first, then request a restart. Restarting can briefly interrupt attestation.</string>
+    <string name="omy_webui_missing">Read-only: file missing, unreadable, a symbolic link, or larger than 128 KiB. This page does not create missing runtime files.</string>
+    <string name="omy_webui_operation_failed">Operation failed. Root may be unavailable, runtime files may be inaccessible or changed since refresh, or a previous save lock may remain. Refresh before retrying. No successful write or restart is confirmed.</string>
+    <string name="omy_webui_loaded">Runtime state loaded. Edits are saved only with the Save buttons.</string>
+    <string name="omy_webui_config_saved">config.toml saved with backup. Restart KeyMint to apply settings that require a restart. TOML syntax has not been validated.</string>
+    <string name="omy_webui_targets_saved">target.txt saved with backup. Wait about 15 seconds, then refresh to check generated scoop.</string>
+    <string name="omy_webui_restart_requested">Restart requested. Refresh shortly to check daemon status and pending markers.</string>
+    <string name="omy_webui_busy">Working…</string>
+    <string name="omy_webui_confirm_restart">Request a runtime restart now? Unsaved edits are not included. Attestation may briefly be interrupted.</string>
+    <string name="omy_webui_confirm_refresh">Discard unsaved edits and reload runtime files?</string>
+</resources>
