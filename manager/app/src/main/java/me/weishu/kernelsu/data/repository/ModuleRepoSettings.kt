@@ -63,9 +63,9 @@ object ModuleRepoSettings {
     /** 给人看的源名字：自家仓库/官方仓库说清楚，其它情况退回主机名。 */
     fun labelOf(url: String): String = when {
         url.contains("XECKernelPro-Modules") && url.contains("jsdelivr") ->
-            "XECKernelPro 模块仓库（jsDelivr）"
+            "XECKernel Ultra 模块仓库（jsDelivr）"
 
-        url.contains("XECKernelPro-Modules") -> "XECKernelPro 模块仓库（GitHub raw）"
+        url.contains("XECKernelPro-Modules") -> "XECKernel Ultra 模块仓库（GitHub raw）"
         url == OFFICIAL_URL || url == OFFICIAL_LEGACY_URL -> "官方模块仓库"
         else -> hostOf(url)
     }

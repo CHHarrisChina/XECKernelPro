@@ -349,7 +349,7 @@ private fun AppProfileInner(
             }
         }
 
-        // 受限授权（XECKernelPro 扩展）：白名单内的 `su -c` 才授予 root。
+        // 受限授权（XECKernel Ultra 扩展）：白名单内的 `su -c` 才授予 root。
         AnimatedVisibility(visible = isRootGranted) {
             ExecPolicyCard(
                 restricted = execRestricted,
@@ -358,7 +358,7 @@ private fun AppProfileInner(
             )
         }
 
-        // Per-app uname 身份（XECKernelPro 扩展）：按 uid 改写 uname 的
+        // Per-app uname 身份（XECKernel Ultra 扩展）：按 uid 改写 uname 的
         // release/version，无需授 root 也生效（应用侦测内核指纹用）。
         UtsSpoofCard(
             release = utsRelease,

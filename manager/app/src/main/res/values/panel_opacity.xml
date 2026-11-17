@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings8_panel_opacity">Background panel opacity</string>
+    <string name="settings8_panel_opacity_summary">How solid every panel and row is. 0% keeps only the 1px outline and the text, 100% is fully opaque. Themes can still scale this value down.</string>
+</resources>

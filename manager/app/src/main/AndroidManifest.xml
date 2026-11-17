@@ -129,15 +129,6 @@
                 android:resource="@xml/xec_score_widget_info" />
         </receiver>
 
-        <service
-            android:name="me.weishu.kernelsu.widget.XecQuickTileService"
-            android:exported="true"
-            android:label="@string/xec_tile_label"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
-            <intent-filter>
-                <action android:name="android.service.quicksettings.action.QS_TILE" />
-            </intent-filter>
-        </service>
     </application>
 
 </manifest>

@@ -1,4 +1,4 @@
-# XECKernel Pro
+# XECKernel Ultra
 
 > Current branch: `fresh-main` · Forked from [`tiann/KernelSU`](https://github.com/tiann/KernelSU), independently maintained
 
@@ -13,7 +13,7 @@ A kernel-based root solution for Android with its own manager: kernel-level `su`
 [![Website](https://img.shields.io/badge/Website-42.193.123.248-12b886.svg)](http://42.193.123.248/)
 
 <p align="center">
-  <img src="docs/assets/xec-hero.svg" alt="XECKernelPro manager — Liquid Home, XEC Score, module backup" width="100%">
+  <img src="docs/assets/xec-hero.svg" alt="XECKernel Ultra manager — Liquid Home, XEC Score, module backup" width="100%">
 </p>
 
 ## Features

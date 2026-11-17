@@ -2,32 +2,16 @@ package com.xecpro.kernel
 
 import android.content.Context
 import android.content.Intent
-import me.weishu.kernelsu.data.repository.SettingsRepositoryImpl
 
 /**
- * Internal navigation intents used by the home-screen widget and the Quick
- * Settings tile. The route carries the same one-shot token as the module-install
- * deep link, so a third-party app cannot ask the manager to run a root action.
+ * Internal navigation intents used by the home-screen widget.
+ *
+ * 2026-11-18（Ultra 精简）：一键隐藏（紫罗兰环境隐藏 / 隐藏 TEE 与密钥）整块功能下线，
+ * 这里只剩"回到管理器首页"这一个入口。原先的一次性 token 路由与鉴权分支一起删除，
+ * 避免留下一个点下去没反应的桌面组件按钮。
  */
 object XecIntents {
-    const val EXTRA_ROUTE = "me.weishu.kernelsu.extra.OPEN_ROUTE"
-    const val EXTRA_TOKEN = "me.weishu.kernelsu.extra.OPEN_TOKEN"
-    const val ROUTE_ONE_TAP_HIDE = "one_tap_hide"
-
     fun openHome(context: Context): Intent =
         Intent(context, XecMainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-
-    fun oneTapHide(context: Context): Intent =
-        openHome(context).apply {
-            putExtra(EXTRA_ROUTE, ROUTE_ONE_TAP_HIDE)
-            putExtra(EXTRA_TOKEN, SettingsRepositoryImpl().intentToken)
-        }
-
-    fun isAuthorized(context: Context, intent: Intent?): Boolean {
-        if (intent == null) return false
-        if (intent.getStringExtra(EXTRA_ROUTE) != ROUTE_ONE_TAP_HIDE) return false
-        val token = intent.getStringExtra(EXTRA_TOKEN) ?: return false
-        return token.isNotBlank() && token == SettingsRepositoryImpl().intentToken
-    }
 }

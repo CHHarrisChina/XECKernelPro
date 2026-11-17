@@ -53,7 +53,7 @@ permissions:
 env:
   SIGN_KEY_ALIAS: xecpro-key
   BRAND_PACKAGE: com.xecpro.kernel
-  BRAND_NAME: XECKernelPro
+  BRAND_NAME: "XECKernel Ultra"
 
 jobs:
   guards:
@@ -503,7 +503,7 @@ jobs:
         run: |
           ./gradlew clean assembleRelease \
             -PKSU_PACKAGE_NAME=${{ env.BRAND_PACKAGE }} \
-            -PKSU_NAME=${{ env.BRAND_NAME }}
+            -PKSU_NAME="${{ env.BRAND_NAME }}"
 
       # Debug 版：内部测试用的可调式包，与正式产物同一套源码、同一套前置载荷。
       # 这里刻意跳过 lint —— debug 变体默认会跑它（release 侧 checkReleaseBuilds=false
@@ -513,7 +513,7 @@ jobs:
         run: |
           ./gradlew :app:assembleDebug -x lint -x lintDebug \
             -PKSU_PACKAGE_NAME=${{ env.BRAND_PACKAGE }} \
-            -PKSU_NAME=${{ env.BRAND_NAME }}
+            -PKSU_NAME="${{ env.BRAND_NAME }}"
 
       # 本工程没有 debug signingConfig，Gradle 出的 debug 件是**未签名**的，装不上。
       # 而且必须用与正式版同一个 key 签：签名不同的包无法覆盖安装，用户得先卸载、

@@ -21,7 +21,7 @@ fun isPanSharePage(url: String): Boolean {
 object RemoteDownloader {
     /** 下载硬上限；上传端在选文件时用同一个值提前拦截，别让接收端注定失败。 */
     const val MAX_FILE_BYTES: Long = 500L * 1024 * 1024
-    private const val UA = "Mozilla/5.0 (Linux; Android 16) XECKernelPro/1.0"
+    private const val UA = "Mozilla/5.0 (Linux; Android 16) XECKernel Ultra/1.0"
 
     fun downloadTo(
         url: String,

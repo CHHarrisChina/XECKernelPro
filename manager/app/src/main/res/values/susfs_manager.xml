@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="susfs_manager_title">SUSFS manager</string>
+    <string name="susfs_open_summary">Kernel-level hiding, spoofing and log switches</string>
+    <string name="susfs_section_kernel">Kernel</string>
+    <string name="susfs_section_switch">Runtime switches</string>
+    <string name="susfs_section_spoof">Spoofing</string>
+    <string name="susfs_section_hide">Hidden paths</string>
+    <string name="susfs_section_misc">Logs and compatibility</string>
+    <string name="susfs_version">SUSFS version</string>
+    <string name="susfs_variant">Variant</string>
+    <string name="susfs_features">Features</string>
+    <string name="susfs_opt_enabled">SUSFS baseline</string>
+    <string name="susfs_opt_enabled_summary">Global runtime gate for the built-in SUSFS baseline. Off = the kernel does not apply any hiding.</string>
+    <string name="susfs_opt_auto_start">Start with the auto-start module</string>
+    <string name="susfs_opt_auto_start_summary">Reinstall the generated userspace module so the saved SUSFS settings are applied on every boot.</string>
+    <string name="susfs_opt_early">Apply in post-fs-data</string>
+    <string name="susfs_opt_early_summary">Apply the settings earlier, before most services start. Leave off if you do not need the earlier window.</string>
+    <string name="susfs_opt_uname">Kernel release spoof</string>
+    <string name="susfs_opt_build_time">Build time spoof</string>
+    <string name="susfs_opt_sus_paths">Hide paths (sus_path)</string>
+    <string name="susfs_opt_sus_loop_paths">Hide loop devices (sus_loop_path)</string>
+    <string name="susfs_opt_sus_maps">Hide mappings (sus_map)</string>
+    <string name="susfs_opt_add_kstat_paths">Fake kstat paths</string>
+    <string name="susfs_opt_kstat_configs">Fake kstat entries</string>
+    <string name="susfs_opt_hide_sus_mounts">Hide SUS mounts from non-root processes</string>
+    <string name="susfs_opt_hide_bl">Hide bootloader status</string>
+    <string name="susfs_opt_cleanup_residue">Clean up mount residue</string>
+    <string name="susfs_opt_enable_log">Kernel log for SUSFS</string>
+    <string name="susfs_opt_avc_log_spoofing">Spoof AVC log</string>
+    <string name="susfs_list_count">%1$d entries</string>
+    <string name="susfs_empty_list">No entries yet</string>
+    <string name="susfs_default_value">default</string>
+    <string name="susfs_loading">Reading…</string>
+    <string name="susfs_no_root">Not available: no root shell or the kernel has no SUSFS patch.</string>
+    <string name="susfs_saved">Saved. The SUSFS module was re-synced from the new config.</string>
+    <string name="susfs_save_failed">Save failed: the daemon rejected the change. The previous config was restored.</string>
+    <string name="susfs_reset">Reset to defaults</string>
+    <string name="susfs_reset_summary">Restore every SUSFS config key to the daemon default</string>
+    <string name="susfs_reset_confirm">Reset all SUSFS settings to their defaults? Hidden paths and spoof values you added will be removed.</string>
+    <string name="susfs_need_reboot">Changes are written to the persistent config and applied by the SUSFS module at boot; reboot to make runtime state match.</string>
+    <string name="susfs_edit_hint">Value</string>
+    <string name="susfs_list_add_hint">Path or entry</string>
+    <string name="susfs_add">Add</string>
+    <string name="susfs_cancel">Cancel</string>
+    <string name="susfs_apply">Save</string>
+</resources>

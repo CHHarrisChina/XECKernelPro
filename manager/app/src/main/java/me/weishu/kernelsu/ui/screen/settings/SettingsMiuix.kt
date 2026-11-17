@@ -34,9 +34,20 @@ import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Style
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.SystemUpdateAlt
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.basic.Slider
+import top.yukonga.miuix.kmp.basic.SliderDefaults
+import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -390,6 +401,15 @@ fun SettingPagerMiuix(
                                     )
                                 },
                             )
+                            // SUSFS 管理页：总开关之下给一个"进去细调"的入口，
+                            // 与 SukiSU Nova 一致 —— 隐藏路径 / 伪装 / 日志都在那一页。
+                            Xc8Row(
+                                title = stringResource(id = R.string.susfs_manager_title),
+                                subtitle = stringResource(id = R.string.susfs_open_summary),
+                                leading = Icons.Rounded.Tune,
+                                onClick = actions.onOpenSusfs,
+                                trailing = { Xc8Chevron() },
+                            )
                             // 内置 TEE/TS 引擎总开关。只关伪造的证明链，不动 root：
                             // 引擎是纯用户态注入，LKM、su、模块、隐藏全部照常。
                             Xc8Row(
@@ -476,8 +496,10 @@ fun SettingPagerMiuix(
                         }
                     }
 
-                    // 外观：组件透明。单独一块而不是塞进上面的功能开关堆里 ——
-                    // 它改的是"所有面板的底色有多实"，属于外观，混在功能列表里没人会想到去找。
+                    // 外观：背景板透明度。2026-11-18 用户要求"所有背景板能自己调透明度"，
+                    // 于是把一个 0/1 开关扩展成 0..100 的滑杆；开关保留为"一键全透明"的
+                    // 快捷方式（它和把滑杆拖到 0 是同一个结果）。单独一块而不是塞进功能开关堆里
+                    // —— 它改的是"所有面板的底色有多实"，属于外观。
                     Xc8Panel(modifier = Modifier.padding(top = 12.dp)) {
                         Xc8Row(
                             title = stringResource(id = R.string.settings8_component_transparent),
@@ -492,6 +514,10 @@ fun SettingPagerMiuix(
                                     onCheckedChange = actions.onSetComponentTransparent,
                                 )
                             },
+                        )
+                        PanelOpacityRow(
+                            percent = uiState.panelOpacity,
+                            onChange = actions.onSetPanelOpacity,
                         )
                     }
 
@@ -558,3 +584,50 @@ fun SettingPagerMiuix(
     }
 }
 
+/**
+ * 背景板透明度滑杆（2026-11-18 用户要求）。
+ *
+ * 拖动时只改本地状态，松手才写设置：每移动 1% 都写一次 SharedPreferences 会让
+ * 整个 Activity 跟着重组（`LocalComponentAlpha` 在根层），拖起来会顿。
+ * 松手后写盘 → MainActivityViewModel 监听到 `panel_opacity` → XcTheme 重新下发
+ * `surfaceAlpha` → 所有面板（Xc8Panel / Xc8Row / 玻璃面）一起变透明。
+ *
+ * 0 与"组件透明"开关等价（只剩 1px 描边和文字），100 = 完全不透明。
+ */
+@Composable
+private fun PanelOpacityRow(percent: Int, onChange: (Int) -> Unit) {
+    var local by remember(percent) { mutableFloatStateOf(percent.coerceIn(0, 100) / 100f) }
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(id = R.string.settings8_panel_opacity),
+                fontSize = 15.sp,
+                color = Xc.colors.text,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "${(local * 100).roundToInt()}%",
+                fontSize = 15.sp,
+                color = Xc.colors.textSecondary,
+            )
+        }
+        Text(
+            text = stringResource(id = R.string.settings8_panel_opacity_summary),
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            color = Xc.colors.textSecondary,
+        )
+        Spacer(Modifier.height(8.dp))
+        Slider(
+            value = local,
+            onValueChange = { local = it },
+            onValueChangeFinished = { onChange((local * 100).roundToInt()) },
+            modifier = Modifier.fillMaxWidth(),
+            valueRange = 0f..1f,
+            showKeyPoints = true,
+            keyPoints = listOf(0f, 0.25f, 0.5f, 0.75f, 1f),
+            magnetThreshold = 0.02f,
+            hapticEffect = SliderDefaults.SliderHapticEffect.Step,
+        )
+    }
+}

@@ -132,7 +132,11 @@ object SuperkeyStore {
      * @return 守卫未武装（无需认证）或认证成功；false = 需要认证但失败。
      */
     fun ensureAuthed(context: Context): Boolean {
-        val status = kernelStatus() ?: return false
+        // 2026-11-18（Ultra 精简）：安全锁入口已从管理器删除，守卫永远不会再被武装。
+        // 但内核不认识 superkey（kernelStatus() == null）时旧实现返回 false，会把
+        // 设置页的每个开关都拦成"验证失败"——那是把"没有锁"误判成"锁住了"。
+        // 只有明确读到"已武装"才要求 fd 级认证；其余一律放行。
+        val status = kernelStatus() ?: return true
         if (!status.guardArmed) return true
         val key = loadLocal(context) ?: return false
         return runCatching { Natives.superkeyAuth(key) }.getOrDefault(false)

@@ -2,12 +2,12 @@
 
 > 本文件是长版技术说明（保留全部实现细节与踩坑记录）；英文简介见 [README.md](README.md)。
 
-# XECKernel Pro
+# XECKernel Ultra
 
 基于 [KernelSU](https://github.com/tiann/KernelSU) 修改开发的 Android root 方案与管理器：内核级 su、模块系统、App Profile、内置 TEE 引擎与 SUSFS 支持。
 
 <p align="center">
-  <img src="docs/assets/xec-hero.svg" alt="XECKernelPro Liquid Home / XEC Score" width="100%">
+  <img src="docs/assets/xec-hero.svg" alt="XECKernel Ultra Liquid Home / XEC Score" width="100%">
 </p>
 
 <p align="center">

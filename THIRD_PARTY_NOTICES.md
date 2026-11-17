@@ -1,6 +1,6 @@
 # 第三方组件与模块致谢（THIRD PARTY NOTICES）
 
-本项目（XECKernel Pro）包含或分发以下第三方作品。各作品的许可证均未被改变，
+本项目（XECKernel Ultra）包含或分发以下第三方作品。各作品的许可证均未被改变，
 感谢原作者。如你是权利人且不希望被列于此或被随本项目分发，请提交 issue，我们会立即处理。
 
 ## 开源协议合规（AGPL / GPL / LGPL / Apache / MIT）

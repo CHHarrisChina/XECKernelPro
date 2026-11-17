@@ -64,6 +64,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -366,14 +372,7 @@ private fun HomeHeader(
     ) {
         // 2026-11-09：标题下面那行「版本号 · 机型」按用户要求去掉 —— 机型在「设备」表里
         // 仍然有，管理器版本也在表里，顶栏不再重复这两项。
-        Text(
-            text = stringResource(R.string.app_name),
-            style = Xc.typography.title,
-            color = Xc.colors.text,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        UltraBrandTitle(modifier = Modifier.weight(1f))
         RebootListPopupMiuix(iconTint = Xc.colors.text)
         Spacer(Modifier.width(6.dp))
         Box(
@@ -395,6 +394,109 @@ private fun HomeHeader(
                     .rotate(spin),
             )
         }
+    }
+}
+
+/**
+ * 顶栏品牌字：`XECKernel` 静止，`Ultra` 用流动炫光（2026-11-18 用户要求）。
+ *
+ * 实现分三层，全部走同一个线性渐变：
+ *  1. 本体：`TextStyle.brush` + [TileMode.Mirror]，渐变起点随 phase 平移 —— 颜色
+ *     在一行字上连续流动，不是逐字闪；
+ *  2. 拖尾：三条错位重影，越远越淡，水平做小幅往返，读起来像彗尾；
+ *  3. 辉光：同一行字带大半径 [Shadow]，颜色按 phase 从调色板取，形成"亮色晕开"。
+ *
+ * 降低动态（无障碍 / 省电）时 phase 冻结、拖尾停在静态位置——不做无限动画。
+ * 渐变坐标故意给的是固定像素区间 + Mirror，因此不依赖文字实测宽度：
+ * 字体缩放变化时左右仍能接上，不会出现"渐变只盖住半个词"。
+ */
+private val UltraBrandColors = listOf(
+    Color(0xFF74FFD9),
+    Color(0xFF4CC9FF),
+    Color(0xFF9A7BFF),
+    Color(0xFFFF7AD9),
+    Color(0xFFFFC94D),
+    Color(0xFF74FFD9),
+)
+
+@Composable
+private fun UltraBrandTitle(modifier: Modifier = Modifier) {
+    val reduced = rememberReducedMotion()
+    val transition = rememberInfiniteTransition(label = "ultraBrand")
+    val flow by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "ultraFlow",
+    )
+    val pulse by transition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "ultraGlowPulse",
+    )
+    val phase = if (reduced) 0.28f else flow
+    val glow = if (reduced) 0.75f else pulse
+    val style = Xc.typography.pageTitle
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        BasicText(
+            text = "XECKernel",
+            style = style.copy(color = Xc.colors.text),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.width(6.dp))
+        UltraWord(phase = phase, glow = glow, style = style)
+    }
+}
+
+@Composable
+private fun UltraWord(phase: Float, glow: Float, style: TextStyle) {
+    val brush = remember(phase) {
+        Brush.linearGradient(
+            colors = UltraBrandColors,
+            start = Offset(-240f + phase * 480f, 0f),
+            end = Offset(240f + phase * 480f, 0f),
+            tileMode = TileMode.Mirror,
+        )
+    }
+    val glowColor = remember(phase) {
+        val index = (phase * UltraBrandColors.size).toInt()
+            .coerceIn(0, UltraBrandColors.size - 1)
+        UltraBrandColors[index]
+    }
+    Box {
+        // 拖尾：三条错位重影。相位驱动的是"左右摆幅"，不是透明度循环——
+        // 常驻低不透明度才不会出现整段字忽明忽暗的闪烁。
+        for (index in 1..3) {
+            BasicText(
+                text = "Ultra",
+                style = style.copy(brush = brush),
+                maxLines = 1,
+                modifier = Modifier.graphicsLayer {
+                    translationX = (phase * 8f + index * 6f) * if (index % 2 == 0) -1f else 1f
+                    alpha = 0.18f / index
+                },
+            )
+        }
+        BasicText(
+            text = "Ultra",
+            style = style.copy(
+                brush = brush,
+                shadow = Shadow(
+                    color = glowColor.copy(alpha = glow * 0.9f),
+                    offset = Offset.Zero,
+                    blurRadius = 22f,
+                ),
+            ),
+            maxLines = 1,
+        )
     }
 }
 

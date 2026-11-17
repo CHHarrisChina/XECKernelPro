@@ -67,7 +67,7 @@ open class KernelSUApplication : Application(), ViewModelStoreOwner {
                 .addInterceptor { block ->
                     block.proceed(
                         block.request().newBuilder()
-                            .header("User-Agent", "XECKernelPro/${BuildConfig.VERSION_CODE}")
+                            .header("User-Agent", "XECKernel Ultra/${BuildConfig.VERSION_CODE}")
                             .header("Accept-Language", Locale.getDefault().toLanguageTag()).build()
                     )
                 }.build()

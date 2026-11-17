@@ -148,7 +148,7 @@ fun XecBootSplash(visible: Boolean) {
                     )
                 }
                 Text(
-                    text = "XECKernelPro",
+                    text = "XECKernel Ultra",
                     color = Xc.colors.text,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.SemiBold,

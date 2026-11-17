@@ -69,7 +69,7 @@ fun SendLogDialog(
             onClick = {
                 val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH_mm")
                 val current = LocalDateTime.now().format(formatter)
-                exportBugreportLauncher.launch("XECKernelPro_bugreport_${current}.tar.gz")
+                exportBugreportLauncher.launch("XECKernel Ultra_bugreport_${current}.tar.gz")
                 onDismissRequest()
             },
         )

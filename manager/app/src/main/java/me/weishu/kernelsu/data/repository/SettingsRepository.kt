@@ -21,6 +21,12 @@ interface SettingsRepository {
      * 这里是用户侧的运行期开关。
      */
     var componentTransparent: Boolean
+
+    /**
+     * 背景板透明度 0..100。与 [componentTransparent] 一起决定 `Xc.surfaceAlpha`：
+     * 组件透明开关仍是 0 档的快捷方式，滑杆给的是 0..100 的连续值。
+     */
+    var panelOpacity: Int
     var navigationRailExpanded: Boolean
     var pageScale: Float
 

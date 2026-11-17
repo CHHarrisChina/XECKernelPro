@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about_agpl_title">许可协议</string>
+    <string name="about_agpl_notice">XECKernel Ultra 以 GNU Affero 通用公共许可证第 3 版或更高版本（AGPL-3.0-or-later）分发，不提供任何担保。每一个发行版对应的完整源码（含 vendored 上游代码树）都在 https://github.com/byBOOK10086/XECKernelPro —— 每个 release tag 与该 APK 的源码逐字对应。内核侧源自 Linux 的代码保持 GPL-2.0；管理器/用户态源自 KernelSU 的代码保持 GPL-3.0；逐项说明见 THIRD_PARTY_NOTICES.md 与 LICENSE-MATRIX.md。</string>
+</resources>

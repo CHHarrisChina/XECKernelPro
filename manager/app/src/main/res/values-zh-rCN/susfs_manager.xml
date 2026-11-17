@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="susfs_manager_title">SUSFS 管理</string>
+    <string name="susfs_open_summary">内核级隐藏、伪装与日志开关</string>
+    <string name="susfs_section_kernel">内核</string>
+    <string name="susfs_section_switch">运行开关</string>
+    <string name="susfs_section_spoof">伪装</string>
+    <string name="susfs_section_hide">隐藏路径</string>
+    <string name="susfs_section_misc">日志与兼容</string>
+    <string name="susfs_version">SUSFS 版本</string>
+    <string name="susfs_variant">变体</string>
+    <string name="susfs_features">能力</string>
+    <string name="susfs_opt_enabled">SUSFS 基线</string>
+    <string name="susfs_opt_enabled_summary">内置 SUSFS 基线的全局运行时总闸。关掉后内核不再应用任何隐藏。</string>
+    <string name="susfs_opt_auto_start">随模块开机自启</string>
+    <string name="susfs_opt_auto_start_summary">重新安装生成的用户态模块，让已保存的 SUSFS 设置每次开机都生效。</string>
+    <string name="susfs_opt_early">在 post-fs-data 阶段应用</string>
+    <string name="susfs_opt_early_summary">更早生效（多数服务启动之前）。不需要这个时间窗就保持关闭。</string>
+    <string name="susfs_opt_uname">内核 release 伪装</string>
+    <string name="susfs_opt_build_time">编译时间伪装</string>
+    <string name="susfs_opt_sus_paths">隐藏路径（sus_path）</string>
+    <string name="susfs_opt_sus_loop_paths">隐藏 loop 设备（sus_loop_path）</string>
+    <string name="susfs_opt_sus_maps">隐藏映射（sus_map）</string>
+    <string name="susfs_opt_add_kstat_paths">伪造 kstat 路径</string>
+    <string name="susfs_opt_kstat_configs">伪造 kstat 条目</string>
+    <string name="susfs_opt_hide_sus_mounts">对非 root 进程隐藏 SUS 挂载</string>
+    <string name="susfs_opt_hide_bl">隐藏 bootloader 状态</string>
+    <string name="susfs_opt_cleanup_residue">清理挂载残留</string>
+    <string name="susfs_opt_enable_log">开启 SUSFS 内核日志</string>
+    <string name="susfs_opt_avc_log_spoofing">伪装 AVC 日志</string>
+    <string name="susfs_list_count">%1$d 条</string>
+    <string name="susfs_empty_list">还没有条目</string>
+    <string name="susfs_default_value">默认</string>
+    <string name="susfs_loading">读取中…</string>
+    <string name="susfs_no_root">不可用：没有 root 壳，或内核没打 SUSFS 补丁。</string>
+    <string name="susfs_saved">已保存，SUSFS 模块已按新配置重新同步。</string>
+    <string name="susfs_save_failed">保存失败：守护进程拒绝了这次修改，已恢复原来的配置。</string>
+    <string name="susfs_reset">恢复默认</string>
+    <string name="susfs_reset_summary">把所有 SUSFS 配置项恢复成守护进程默认值</string>
+    <string name="susfs_reset_confirm">把所有 SUSFS 设置恢复默认？你添加的隐藏路径与伪装值都会被清掉。</string>
+    <string name="susfs_need_reboot">改动写入持久配置，由 SUSFS 模块在开机时落实；要让运行时状态一致，请重启。</string>
+    <string name="susfs_edit_hint">值</string>
+    <string name="susfs_list_add_hint">路径或条目</string>
+    <string name="susfs_add">添加</string>
+    <string name="susfs_cancel">取消</string>
+    <string name="susfs_apply">保存</string>
+</resources>

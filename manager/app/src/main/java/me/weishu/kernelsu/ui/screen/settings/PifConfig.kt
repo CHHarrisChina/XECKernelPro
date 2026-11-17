@@ -199,7 +199,7 @@ object PifConfig {
         val props = toProps(obj, fingerprint)
         if (props.isEmpty()) return Result.failure(Refused("没能从 JSON 里解析出任何属性"))
         val body = buildString {
-            append("# 由 XECKernel Pro 管理器生成；来源：").append(sourceName).append('\n')
+            append("# 由 XECKernel Ultra 管理器生成；来源：").append(sourceName).append('\n')
             for ((k, v) in props) append(k).append('=').append(v).append('\n')
         }
         val local = File(context.cacheDir, "pif_props_${System.currentTimeMillis()}.txt")

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings8_panel_opacity">背景板透明度</string>
+    <string name="settings8_panel_opacity_summary">所有面板与行的底色有多实。0% 只剩 1px 描边和文字，100% 完全不透明。主题自带的透明度仍会在这个值上再乘一次。</string>
+</resources>

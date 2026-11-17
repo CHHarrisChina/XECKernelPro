@@ -515,7 +515,6 @@ fun ModulePagerMiuix(
                     onLongPressModule = { module ->
                         showModuleSheet(module)
                     },
-                    onOpenHidePack = { navigator.push(Route.HideEnvList) },
                     contentPadding = PaddingValues(
                         top = 6.dp,
                         start = 0.dp,
@@ -617,7 +616,6 @@ fun ModulePagerMiuix(
                             onLongPressModule = { module ->
                                 showModuleSheet(module)
                             },
-                            onOpenHidePack = { navigator.push(Route.HideEnvList) },
                             contentPadding = contentPadding,
                             listState = listState,
                         )
@@ -770,7 +768,6 @@ private fun ModuleList(
     actions: ModuleActions,
     onModuleAddShortcut: (Module, ShortcutType) -> Unit,
     onLongPressModule: (Module) -> Unit,
-    onOpenHidePack: () -> Unit = {},
     contentPadding: PaddingValues,
     listState: LazyListState = rememberLazyListState(),
 ) {
@@ -782,9 +779,6 @@ private fun ModuleList(
         contentPadding = contentPadding,
         overscrollEffect = null,
     ) {
-        item(key = "hide_pack_entry", contentType = "hide_pack") {
-            HidePackEntryCard(onClick = onOpenHidePack)
-        }
         items(
             items = modules,
             key = { it.id },
@@ -1071,20 +1065,6 @@ fun ModuleItem(
     }
 }
 
-/**
- * 「一键隐藏」入口卡：紫罗兰工具箱资源包的部署入口，固定在模块列表最上方。
- * 卡体语言与 [ModuleItem] 完全同款（同圆角/玻璃/描边/按压缩放/辉光投影），
- * 只是内容压缩成单行——视觉上就是列表里「没有开关的模块卡」。
- */
-@Composable
-private fun HidePackEntryCard(onClick: () -> Unit) {
-    ModuleEntryCard(
-        icon = Icons.Rounded.VisibilityOff,
-        title = stringResource(R.string.hide_one_tap_title),
-        subtitle = stringResource(R.string.hide_one_tap_subtitle),
-        onClick = onClick,
-    )
-}
 
 /**
  * 入口卡与模块卡的「同款语言」实现。逐项对齐 [ModuleItem]：

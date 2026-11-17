@@ -114,6 +114,10 @@ class SettingsRepositoryImpl : SettingsRepository {
         get() = prefs.getBoolean("component_transparent", false)
         set(value) = prefs.edit { putBoolean("component_transparent", value) }
 
+    override var panelOpacity: Int
+        get() = prefs.getInt("panel_opacity", 100).coerceIn(0, 100)
+        set(value) = prefs.edit { putInt("panel_opacity", value.coerceIn(0, 100)) }
+
     override var enableNavigationBadge: Boolean
         get() = prefs.getBoolean("enable_navigation_badge", true)
         set(value) = prefs.edit { putBoolean("enable_navigation_badge", value) }

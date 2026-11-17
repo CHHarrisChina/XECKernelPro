@@ -21,6 +21,8 @@ data class SettingsUiState(
 
     /** 组件透明：所有面板/行/按钮底色设为全透明，只留描边与文字。 */
     val componentTransparent: Boolean = false,
+    /** 背景板透明度 0..100（100 = 不透明；0 = 全透明，只剩 1px 描边与文字）。 */
+    val panelOpacity: Int = 100,
     val pageScale: Float = 1.0f,
     val enableWebDebugging: Boolean = false,
 
@@ -74,6 +76,8 @@ data class SettingsScreenActions(
     val onSetCheckUpdate: (Boolean) -> Unit,
     /** 组件透明（所有面板/行底色 alpha 归零，只留 1px 描边与文字）。 */
     val onSetComponentTransparent: (Boolean) -> Unit,
+    /** 背景板透明度 0..100。 */
+    val onSetPanelOpacity: (Int) -> Unit,
     val onSetCheckModuleUpdate: (Boolean) -> Unit,
     val onOpenTheme: () -> Unit,
     /** 主题商城 / 我的主题 / 编辑器（换肤与分享）。 */
@@ -82,6 +86,8 @@ data class SettingsScreenActions(
     val onOpenProfileTemplate: () -> Unit,
     val onOpenRemoteAssistant: () -> Unit,
     val onOpenTools: () -> Unit,
+    /** 打开 SUSFS 管理页。 */
+    val onOpenSusfs: () -> Unit,
     val onSetSuCompatMode: (Int) -> Unit,
     val onSetKernelUmountEnabled: (Boolean) -> Unit,
     val onSetSelinuxHideEnabled: (Boolean) -> Unit,

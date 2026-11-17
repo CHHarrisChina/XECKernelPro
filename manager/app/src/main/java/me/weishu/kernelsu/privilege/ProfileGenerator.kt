@@ -113,7 +113,7 @@ object ProfileGenerator {
                 }.getOrNull() ?: return@withContext GenResult.NoMatch(release, "cannot read ${donor.file}")
 
                 val derived = buildString {
-                    append("# XECKernelPro generated profile - do not edit this header.\n")
+                    append("# XECKernel Ultra generated profile - do not edit this header.\n")
                     append("# device release: $release\n")
                     append("# derived from: ${donor.file} (${donor.release})\n")
                     append("# generated: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}\n")
@@ -141,7 +141,7 @@ object ProfileGenerator {
                 }.getOrNull() ?: return@withContext GenResult.NoMatch(release, "cannot read ${template.second}")
 
                 val derived = buildString {
-                    append("# XECKernelPro generated profile (TEMPLATE-BOUND, fields unfilled).\n")
+                    append("# XECKernel Ultra generated profile (TEMPLATE-BOUND, fields unfilled).\n")
                     append("# device release: $release\n")
                     append("# bound from: ${template.second}\n")
                     append("#\n")

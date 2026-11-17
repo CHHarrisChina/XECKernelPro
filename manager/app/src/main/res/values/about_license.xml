@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about_agpl_title">License</string>
+    <string name="about_agpl_notice">XECKernel Ultra is distributed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later), with NO WARRANTY. The complete corresponding source code for every shipped build, including the vendored upstream trees, lives at https://github.com/byBOOK10086/XECKernelPro — each release tag corresponds to the exact source of that APK. Kernel-side code derived from Linux stays GPL-2.0; manager/userspace code derived from KernelSU stays GPL-3.0; see THIRD_PARTY_NOTICES.md and LICENSE-MATRIX.md.</string>
+</resources>

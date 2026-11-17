@@ -108,33 +108,20 @@ sealed interface Route : NavKey, Parcelable {
 
     @Parcelize
     @Serializable
-    data object HideEnvList : Route
-
-    @Parcelize
-    @Serializable
-    data object OneTapHide : Route
-
-    @Parcelize
-    @Serializable
     data object RemoteAssistant : Route
 
-    /** 终端：原底栏第 7 页，现从设置页入口卡进入（底栏 7 页收敛为 5 页）。 */
-    @Parcelize
-    @Serializable
-    data object Terminal : Route
-
-    /** 工具箱：终端 / 安全锁（超级密钥）/ 隐身入口的统一菜单（从设置页进入）。 */
+    /**
+     * 工具箱：评分 / 收集密钥池 / 引擎 WebUI / 隐身入口 / 指纹自检
+     * （从设置页进入；终端、安全锁、扩展模块、提权已在 Ultra 精简中下线）。
+     */
     @Parcelize
     @Serializable
     data object Tools : Route
 
-    /**
-     * 扩展模块：TEE 引擎 / TA 增强（本项目构建、管理器内安装）与
-     * Zygisk（ReZygisk，第三方 AGPL-3.0-or-later，只跳转上游 Releases，不内置）。
-     */
+    /** SUSFS 管理：与 SukiSU Nova 同款的内核级隐藏/伪装开关页（从设置页进入）。 */
     @Parcelize
     @Serializable
-    data object ExternalModules : Route
+    data object Susfs : Route
 
     /**
      * 提权控制台：GhostLock（CVE-2026-43499）一键提权 + 手动 profile 操作空间。

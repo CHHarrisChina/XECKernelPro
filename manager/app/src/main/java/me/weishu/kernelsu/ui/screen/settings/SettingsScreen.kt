@@ -43,6 +43,7 @@ fun SettingPager(
     val actions = SettingsScreenActions(
         onSetCheckUpdate = viewModel::setCheckUpdate,
         onSetComponentTransparent = viewModel::setComponentTransparent,
+        onSetPanelOpacity = viewModel::setPanelOpacity,
         onSetCheckModuleUpdate = viewModel::setCheckModuleUpdate,
         onOpenTheme = { navigator.push(Route.ColorPalette) },
         // 主题商城/编辑器是独立一屏：调色屏改的是"当前外观"，主题屏管的是"整套皮肤"。
@@ -51,6 +52,7 @@ fun SettingPager(
         onOpenProfileTemplate = { navigator.push(Route.AppProfileTemplate) },
         onOpenRemoteAssistant = { navigator.push(Route.RemoteAssistant) },
         onOpenTools = { navigator.push(Route.Tools) },
+        onOpenSusfs = { navigator.push(Route.Susfs) },
         onSetSuCompatMode = viewModel::setSuCompatMode,
         onSetKernelUmountEnabled = viewModel::setKernelUmountEnabled,
         onSetSelinuxHideEnabled = viewModel::setSelinuxHideEnabled,

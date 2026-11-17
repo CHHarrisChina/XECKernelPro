@@ -38,7 +38,7 @@ object StoreCatalogRepository {
     private const val DIR_NAME = "theme-store"
     private const val FILE_INDEX = "themes.json"
     private const val FILE_META = "meta.json"
-    private const val USER_AGENT = "XECKernelPro-Manager"
+    private const val USER_AGENT = "XECKernel Ultra-Manager"
 
     /** 一次成功加载的结果。[fromCache] = true 表示这次没有真的联网成功（用的是磁盘快照）。 */
     data class Snapshot(

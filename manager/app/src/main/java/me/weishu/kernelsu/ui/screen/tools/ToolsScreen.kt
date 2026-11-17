@@ -1,33 +1,32 @@
 package me.weishu.kernelsu.ui.screen.tools
 
 /*
- * 工具箱：评分 / 提权 / 终端 / 外部模块 / 安全锁 / 隐身。
- * 2026-10-26 从设置页拆出——低频工具占设置一整屏，收进一个入口；
- * 「超级密钥」对用户改叫「安全锁」，文案全部走大白话（不出现 fd/ioctl/守卫等词）。
+ * 工具箱：评分 / 收集密钥池 / 引擎 WebUI / 隐身入口 / 指纹自检。
  *
- * 2026-11-09（扁平方案 A）：六个入口收进**一张面板**，行与行之间只有 1px 发丝线，
+ * 2026-11-18（Ultra 精简，用户明确要求删除）：
+ *   - 终端：整块功能下线（路由与实现文件一起删除），不是藏起来；
+ *   - 安全锁（内核 superkey 的管理器侧）：入口与弹窗一起删除，避免"能开不能关"
+ *     的死锁；内核里那套守卫逻辑保留，但管理器不再提供武装入口；
+ *   - 内核版本：点开即闪退，直接下线（连同 KernelVersionDialog.kt）；
+ *   - TEE 修复：与内置引擎自愈逻辑重复，下线（连同 TeeRepairDialog.kt）；
+ *   - 扩展模块：TEE 引擎 / TA 增强改由安装流程与内置引擎自动处理，不再单列入口；
+ *   - 提权：提权控制台仍由安装页的"提权更新"路径使用，但工具箱不再提供入口。
+ *
+ * 2026-11-09（扁平方案 A）：入口收进**一张面板**，行与行之间只有 1px 发丝线，
  * 不再一组一张卡；评分卡从雷达改成"大数字 + 九格"。
  */
 import android.content.Intent
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material.icons.rounded.Code
-import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.runtime.Composable
@@ -37,7 +36,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -47,38 +45,28 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.privilege.StealthEntrance
-import me.weishu.kernelsu.privilege.SuperkeyStore
-import me.weishu.kernelsu.ui.component.dialog.XDialog
-import me.weishu.kernelsu.ui.component.dialog.XDialogTitle
+import me.weishu.kernelsu.ui.MainPagerBus
 import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
 import me.weishu.kernelsu.ui.design.panel.Xc8Chevron
 import me.weishu.kernelsu.ui.design.panel.Xc8Panel
-import me.weishu.kernelsu.ui.screen.settings.PifSection
 import me.weishu.kernelsu.ui.design.panel.Xc8Row
 import me.weishu.kernelsu.ui.design.panel.Xc8SectionLabel
 import me.weishu.kernelsu.ui.design.panel.Xc8Switch
-import me.weishu.kernelsu.ui.MainPagerBus
 import me.weishu.kernelsu.ui.navigation3.LocalNavigator
-import me.weishu.kernelsu.ui.navigation3.Route
+import me.weishu.kernelsu.ui.screen.settings.PifSection
 import me.weishu.kernelsu.ui.viewmodel.HomeViewModel
 import me.weishu.kernelsu.ui.webui.OmyWebUIActivity
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Switch
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -96,9 +84,6 @@ fun ToolsScreen() {
     val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { homeViewModel.refresh() }
 
-    var showSuperkey by rememberSaveable { mutableStateOf(false) }
-    var showKernelVersion by rememberSaveable { mutableStateOf(false) }
-    var showTeeRepair by rememberSaveable { mutableStateOf(false) }
     var showKeyboxPool by rememberSaveable { mutableStateOf(false) }
     var stealthOn by rememberSaveable { mutableStateOf(false) }
     var stealthBusy by rememberSaveable { mutableStateOf(false) }
@@ -192,43 +177,6 @@ fun ToolsScreen() {
                         modifier = Modifier.padding(top = 22.dp),
                     )
                     Xc8Panel {
-                        // 提权入口（原首页未激活态那块）。放在工具箱里恒显示：
-                        // 它不只是"没 root 时的补救"，也是 root 掉了之后重跑 late-load 的入口。
-                        Xc8Row(
-                            title = stringResource(R.string.privilege_title),
-                            subtitle = stringResource(R.string.privilege_entry_subtitle),
-                            leading = Icons.Rounded.Bolt,
-                            onClick = { navigator.push(Route.Privilege(updateMode = false)) },
-                            trailing = { Xc8Chevron() },
-                        )
-                        Xc8Row(
-                            title = stringResource(id = R.string.tools_terminal_title),
-                            subtitle = stringResource(id = R.string.tools_terminal_summary),
-                            leading = Icons.Rounded.Code,
-                            onClick = { navigator.push(Route.Terminal) },
-                            trailing = { Xc8Chevron() },
-                        )
-                        Xc8Row(
-                            title = stringResource(id = R.string.tools_external_modules_title),
-                            subtitle = stringResource(id = R.string.tools_external_modules_summary),
-                            leading = Icons.Rounded.Extension,
-                            onClick = { navigator.push(Route.ExternalModules) },
-                            trailing = { Xc8Chevron() },
-                        )
-                        Xc8Row(
-                            title = stringResource(R.string.kernel_version_title),
-                            subtitle = stringResource(R.string.kernel_version_summary),
-                            leading = Icons.Rounded.Code,
-                            onClick = { showKernelVersion = true },
-                            trailing = { Xc8Chevron() },
-                        )
-                        Xc8Row(
-                            title = "TEE 修复",
-                            subtitle = "诊断密钥库并恢复 OMY 引擎",
-                            leading = Icons.Rounded.Key,
-                            onClick = { showTeeRepair = true },
-                            trailing = { Xc8Chevron() },
-                        )
                         Xc8Row(
                             title = "收集密钥池",
                             subtitle = "获取上游密钥、查看时间并选择应用",
@@ -240,14 +188,11 @@ fun ToolsScreen() {
                             title = stringResource(R.string.omy_webui_title),
                             subtitle = stringResource(R.string.omy_webui_summary),
                             leading = Icons.Rounded.Key,
-                            onClick = { context.startActivity(Intent(context, OmyWebUIActivity::class.java)) },
-                            trailing = { Xc8Chevron() },
-                        )
-                        Xc8Row(
-                            title = stringResource(id = R.string.superkey_settings_title),
-                            subtitle = stringResource(id = R.string.superkey_settings_summary),
-                            leading = Icons.Rounded.Key,
-                            onClick = { showSuperkey = true },
+                            onClick = {
+                                context.startActivity(
+                                    Intent(context, OmyWebUIActivity::class.java),
+                                )
+                            },
                             trailing = { Xc8Chevron() },
                         )
                         Xc8Row(
@@ -275,135 +220,5 @@ fun ToolsScreen() {
         }
     }
 
-    if (showKernelVersion) KernelVersionDialog(onDismiss = { showKernelVersion = false })
-    if (showTeeRepair) TeeRepairDialog(onDismiss = { showTeeRepair = false })
     if (showKeyboxPool) KeyboxPoolDialog(onDismiss = { showKeyboxPool = false })
-    if (showSuperkey) {
-        SuperkeyDialog(onDismiss = { showSuperkey = false })
-    }
-}
-
-/**
- * 安全锁（内部名 superkey，对用户不出现该词）：
- * 设置/更换/清除锁密码 + 保护开关。内核只存 SHA-256 指纹、重启即失——
- * 重启后保护自动解除（这也是忘记密码时的恢复路径）。
- */
-@Composable
-private fun SuperkeyDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    var status by remember { mutableStateOf<SuperkeyStore.KernelStatus?>(null) }
-    var newKey by rememberSaveable { mutableStateOf("") }
-    var oldKey by rememberSaveable { mutableStateOf("") }
-    var message by rememberSaveable { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { status = SuperkeyStore.kernelStatus() }
-
-    XDialog(show = true, onDismissRequest = onDismiss) {
-        Column(Modifier.padding(20.dp)) {
-            XDialogTitle(text = stringResource(R.string.superkey_settings_title))
-            Text(
-                text = stringResource(R.string.superkey_status,
-                    stringResource(if (status?.set == true) R.string.superkey_state_set else R.string.superkey_state_unset),
-                    stringResource(if (status?.guardArmed == true) R.string.superkey_state_armed else R.string.superkey_state_disarmed)),
-                fontSize = 13.sp,
-                color = colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-            Text(
-                text = stringResource(R.string.superkey_dialog_hint),
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
-                color = colorScheme.onSurfaceVariantSummary,
-            )
-            Spacer(Modifier.height(12.dp))
-            if (status?.set == true) {
-                TextField(
-                    value = oldKey,
-                    onValueChange = { oldKey = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.superkey_old_key_label),
-                    maxLines = 1,
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-            TextField(
-                value = newKey,
-                onValueChange = { newKey = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.superkey_new_key_label),
-                maxLines = 1,
-            )
-            Row(Modifier.padding(top = 4.dp)) {
-                TextButton(
-                    text = stringResource(R.string.superkey_generate),
-                    onClick = { newKey = SuperkeyStore.generateKey() },
-                )
-                Spacer(Modifier.weight(1f))
-            }
-            message?.let {
-                Text(it, fontSize = 13.sp, color = colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.padding(vertical = 4.dp))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.superkey_arm_guard),
-                    fontSize = 15.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    enabled = newKey.isNotBlank() || status?.set == true,
-                    checked = status?.guardArmed == true,
-                    onCheckedChange = { arm ->
-                        // 内核在保护期间拦截"改配置"命令：解除前必须先验证锁密码，
-                        // 否则一律拒绝——保护"能开不能关"的实锤根因。首次开启无需验证。
-                        val ok = if (arm) {
-                            SuperkeyStore.armGuard(true)
-                        } else {
-                            SuperkeyStore.ensureAuthed(context) && SuperkeyStore.armGuard(false)
-                        }
-                        message = context.getString(
-                            if (ok) R.string.superkey_applied else R.string.superkey_apply_failed
-                        )
-                        status = SuperkeyStore.kernelStatus()
-                    },
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Row {
-                TextButton(
-                    text = stringResource(R.string.superkey_apply),
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        val old = oldKey.ifBlank { null }
-                        val ok = SuperkeyStore.setKernelKey(newKey, old)
-                        if (ok) {
-                            SuperkeyStore.saveLocal(context, newKey)
-                            newKey = ""
-                            oldKey = ""
-                        }
-                        message = context.getString(
-                            if (ok) R.string.superkey_applied else R.string.superkey_apply_failed
-                        )
-                        status = SuperkeyStore.kernelStatus()
-                    },
-                )
-                Spacer(Modifier.width(8.dp))
-                TextButton(
-                    text = stringResource(R.string.superkey_clear),
-                    modifier = Modifier.weight(1f),
-                    enabled = status?.set == true,
-                    onClick = {
-                        val ok = SuperkeyStore.clearKernelKey(oldKey)
-                        if (ok) {
-                            SuperkeyStore.clearLocal(context)
-                            oldKey = ""
-                        }
-                        message = context.getString(
-                            if (ok) R.string.superkey_applied else R.string.superkey_apply_failed
-                        )
-                        status = SuperkeyStore.kernelStatus()
-                    },
-                )
-            }
-        }
-    }
 }

@@ -61,6 +61,7 @@ class SettingsViewModel(
             val enableFloatingBottomBarBlur = repo.enableFloatingBottomBarBlur
             val enableNavigationBadge = repo.enableNavigationBadge
             val componentTransparent = repo.componentTransparent
+            val panelOpacity = repo.panelOpacity
             val pageScale = repo.pageScale
             val enableWebDebugging = repo.enableWebDebugging
             val wallpaperLight = repo.wallpaperLight
@@ -106,6 +107,7 @@ class SettingsViewModel(
                     enableFloatingBottomBarBlur = enableFloatingBottomBarBlur,
                     enableNavigationBadge = enableNavigationBadge,
                     componentTransparent = componentTransparent,
+                    panelOpacity = panelOpacity,
                     pageScale = pageScale,
                     enableWebDebugging = enableWebDebugging,
                     wallpaperLight = wallpaperLight,
@@ -217,6 +219,13 @@ class SettingsViewModel(
     fun setComponentTransparent(enabled: Boolean) {
         repo.componentTransparent = enabled
         _uiState.update { it.copy(componentTransparent = enabled) }
+    }
+
+    /** 背景板透明度滑杆：0..100，写进设置后 MainActivity 立即用新 alpha 重组。 */
+    fun setPanelOpacity(value: Int) {
+        val clamped = value.coerceIn(0, 100)
+        repo.panelOpacity = clamped
+        _uiState.update { it.copy(panelOpacity = clamped) }
     }
 
     fun setPageScale(scale: Float) {

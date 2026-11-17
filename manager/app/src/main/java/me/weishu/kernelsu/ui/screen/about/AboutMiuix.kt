@@ -54,6 +54,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
@@ -439,6 +440,20 @@ private fun AboutContent(
                                 trailing = { Xc8Chevron() },
                             )
                         }
+                    }
+
+                    // AGPL-3.0 §13：通过网络使用本程序的人也有权知道对应源码在哪。
+                    // 这段常驻在"关于"页，而不是只塞在 README 里 —— 装在设备上的人
+                    // 未必会去看仓库页面。
+                    Xc8Panel(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .padding(top = 12.dp),
+                    ) {
+                        Xc8Row(
+                            title = stringResource(R.string.about_agpl_title),
+                            subtitle = stringResource(R.string.about_agpl_notice),
+                        )
                     }
                     Spacer(
                         Modifier.height(

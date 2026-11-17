@@ -1,6 +1,6 @@
 # 许可证矩阵（License Matrix）
 
-本项目 **XECKernel Pro** 不是单一许可证仓库：它由「我们自己的代码」「KernelSU 上游派生物」「Linux 内核模块」「第三方 vendor 代码」「服务器端」五类来源组成，每一类的许可证不同。任何二次分发都必须按本表逐项处理，不能只看根目录的 `LICENSE`。
+本项目 **XECKernel Ultra** 不是单一许可证仓库：它由「我们自己的代码」「KernelSU 上游派生物」「Linux 内核模块」「第三方 vendor 代码」「服务器端」五类来源组成，每一类的许可证不同。任何二次分发都必须按本表逐项处理，不能只看根目录的 `LICENSE`。
 
 **项目主许可证（我们自己的原创代码）：AGPL-3.0-or-later** — 见 [`LICENSE`](LICENSE)。
 

@@ -101,14 +101,11 @@ import me.weishu.kernelsu.ui.screen.about.AboutScreen
 import me.weishu.kernelsu.ui.screen.appprofile.AppProfileScreen
 import me.weishu.kernelsu.ui.screen.colorpalette.ColorPaletteScreen
 import me.weishu.kernelsu.ui.screen.executemoduleaction.ExecuteModuleActionScreen
-import me.weishu.kernelsu.ui.screen.extmodules.ExternalModulesScreen
 import me.weishu.kernelsu.ui.screen.flash.FlashScreen
 import me.weishu.kernelsu.ui.screen.detect.DetectPager
 import me.weishu.kernelsu.ui.screen.home.HomePager
-import me.weishu.kernelsu.ui.screen.hidepack.HideEnvListScreen
-import me.weishu.kernelsu.ui.screen.hidepack.OneTapHideScreen
 import me.weishu.kernelsu.ui.screen.remote.RemoteAssistantScreen
-import me.weishu.kernelsu.ui.screen.terminal.TerminalScreen
+import me.weishu.kernelsu.ui.screen.susfs.SusfsScreen
 import me.weishu.kernelsu.ui.screen.tools.ToolsScreen
 import me.weishu.kernelsu.ui.screen.theme.ThemeScreen
 import me.weishu.kernelsu.ui.screen.install.InstallScreen
@@ -263,7 +260,13 @@ open class MainActivity : ComponentActivity() {
                     // 设置里的「组件透明」：0f = 全透明（只留 1px 描边与文字），
                     // 1f = 不透明。它乘在主题 `XcGlass.surfaceAlpha` 上面，
                     // 所以主题自带的不透明度不会被这个开关抹掉。
-                    componentAlpha = if (uiState.componentTransparent) 0f else 1f,
+                    // 背景板透明度：0..100 的滑杆直接换算成 alpha；老开关仍是 0 档的
+                    // 快捷方式（组件透明 = 全透明），两个入口写的是同一个视觉结果。
+                    componentAlpha = if (uiState.componentTransparent) {
+                        0f
+                    } else {
+                        (uiState.panelOpacity.coerceIn(0, 100) / 100f)
+                    },
                 ) {
                     // 窗口底色跟"应用解析后的主题"走，不能交给 values / values-night：
                     // 资源里的那套只认系统深浅，而本应用的主题是用户在设置里单独选的。
@@ -452,12 +455,9 @@ open class MainActivity : ComponentActivity() {
                                             entry<Route.Install> { InstallScreen() }
                                             entry<Route.Flash> { key -> FlashScreen(key.flashIt) }
                                             entry<Route.ExecuteModuleAction> { key -> ExecuteModuleActionScreen(key.moduleId, key.fromShortcut) }
-                                            entry<Route.HideEnvList> { HideEnvListScreen() }
-                                            entry<Route.OneTapHide> { OneTapHideScreen() }
                                             entry<Route.RemoteAssistant> { RemoteAssistantScreen() }
-                                            entry<Route.Terminal> { TerminalScreen() }
                                             entry<Route.Tools> { ToolsScreen() }
-                                            entry<Route.ExternalModules> { ExternalModulesScreen() }
+                                            entry<Route.Susfs> { SusfsScreen() }
                                             entry<Route.Privilege> { key -> PrivilegeScreen(key.updateMode) }
                                             entry<Route.Home> { mainScreenEntry() }
                                             entry<Route.SuperUser> { mainScreenEntry() }

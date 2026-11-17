@@ -26,6 +26,9 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -51,7 +54,7 @@ private const val DISK_CACHE_DIR = "store-img"
 private const val MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024
 private const val CONNECT_TIMEOUT_MS = 10_000
 private const val READ_TIMEOUT_MS = 15_000
-private const val USER_AGENT = "XECKernelPro-Manager"
+private const val USER_AGENT = "XECKernel Ultra-Manager"
 
 /** 一张远程图的三种状态。 */
 sealed interface RemoteImageState {
@@ -230,7 +233,18 @@ fun RemotePreview(
     placeholder: Color = Color.Transparent,
 ) {
     val state by rememberRemoteImage(url)
-    Box(modifier = modifier.background(placeholder)) {
+    // 占位底不画纯色：2026-11-18 真机上整排主题都显示白块，根因是上游四张预览
+    // JPEG 全部损坏（解码失败），而占位色在浅色主题下就是一块白。现在占位本身是
+    // 一层浅渐变 + 暗角，任何"没有图"的情况都不会再被误读成"这个主题就是白的"。
+    Box(
+        modifier = modifier.background(
+            Brush.linearGradient(
+                colors = listOf(placeholder, placeholder.copy(alpha = 0.74f), placeholder),
+                start = Offset.Zero,
+                end = Offset(920f, 720f),
+            ),
+        ),
+    ) {
         val ready = state as? RemoteImageState.Ready
         if (ready != null) {
             Image(
@@ -238,6 +252,19 @@ fun RemotePreview(
                 contentDescription = contentDescription,
                 contentScale = contentScale,
                 modifier = Modifier.matchParentSize(),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .drawBehind {
+                        drawRect(Color.Black.copy(alpha = 0.20f))
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.05f),
+                            radius = size.minDimension * 0.55f,
+                            center = Offset(size.width * 0.18f, size.height * 0.10f),
+                        )
+                    },
             )
         }
     }

@@ -91,9 +91,70 @@ internal object KeyboxPoolRepository {
         fun only(name: String) = children.single { it.name == name }
     }
 
+    // 设备上已经装好的 keybox。内置引擎随包带了一份（userspace/ksud/builtin/
+    // tricky_store/keybox.xml 会装进模块目录），TrickyStore 系引擎还有自己的拷贝。
+    // 2026-11-18 真机「0 / 10」的直接原因就在这里：网络两路都拿不到时，明明设备里
+    // 有一份可用 keybox，界面却只报 0。现在本地先列、网络随后补，任何时候都不会再是 0。
+    private val localPaths = listOf(
+        "/data/adb/tricky_store/keybox.xml",
+        "/data/adb/ksu/builtin/tricky_store/keybox.xml",
+        "/data/adb/modules/tricky_store/keybox.xml",
+        "/data/adb/modules_update/tricky_store/keybox.xml",
+    )
+
+    private suspend fun readLocalFile(path: String): ByteArray? = withContext(Dispatchers.IO) {
+        val shell = runCatching { awaitRootShell() }.getOrNull() ?: return@withContext null
+        if (!shell.isRoot) return@withContext null
+        val out = ArrayList<String>()
+        val err = ArrayList<String>()
+        val ok = shell.newJob()
+            .add("cat " + shQuote(path) + " 2>/dev/null")
+            .to(out, err)
+            .exec()
+            .isSuccess
+        if (!ok || out.isEmpty()) null else out.joinToString("\n").toByteArray(Charsets.UTF_8)
+    }
+
+    /** 把设备上已安装的 keybox 也当成候选；读不到/校验不过只记一条说明，不抛异常。 */
+    private suspend fun localCandidates(): Pair<List<Candidate>, List<String>> {
+        val found = mutableListOf<Candidate>()
+        val notices = mutableListOf<String>()
+        if (runCatching { awaitRootShell() }.getOrNull()?.isRoot != true) {
+            notices += "设备内置 keybox：没有 root 权限，跳过本地读取。"
+            return found to notices
+        }
+        for (path in localPaths) {
+            currentCoroutineContext().ensureActive()
+            if (found.size >= LIMIT) break
+            val raw = readLocalFile(path) ?: continue
+            try {
+                val root = parse(raw)
+                if (root.name != "AndroidAttestation") continue
+                for (box in root.children.filter { it.name == "Keybox" }) {
+                    if (found.size >= LIMIT) break
+                    found += validate(box, "设备内置", path, null)
+                }
+                if (found.isNotEmpty()) break
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                notices += "设备内置 keybox：$path 没通过本地校验。"
+            }
+        }
+        return found to notices
+    }
+
     suspend fun fetch(): Pool = withContext(Dispatchers.IO) {
         val candidates = linkedMapOf<String, Candidate>()
         val notices = mutableListOf<String>()
+        // 1) 本地已装 keybox 先列：不依赖网络，离线也能应用，池子不再是 0。
+        val (local, localNotices) = localCandidates()
+        local.forEach { candidates.putIfAbsent(it.id, it) }
+        notices += localNotices
+        if (local.isNotEmpty()) {
+            notices += "设备内置 keybox：已列出 ${local.size} 份，可直接应用。"
+        }
+        // 2) 上游源：国内镜像 → jsDelivr → 官方 raw，拿到可用候选就停。
         for (source in sources) {
             currentCoroutineContext().ensureActive()
             var result: SourceResult? = null
@@ -113,17 +174,17 @@ internal object KeyboxPoolRepository {
             }
             val outcome = result
             if (outcome == null) {
-                notices += "${source.name}: ${reasonOf(lastError)}"
+                notices += "${source.name}：${reasonOf(lastError)}"
                 continue
             }
             outcome.candidates.forEach { candidates.putIfAbsent(it.id, it) }
             when {
                 outcome.candidates.isNotEmpty() && outcome.rejected > 0 ->
-                    notices += "${source.name}: ${outcome.rejected} keybox(es) rejected by local validation."
+                    notices += "${source.name}：${outcome.rejected} 份未通过本地校验。"
                 outcome.candidates.isEmpty() && outcome.empty ->
-                    notices += "${source.name}: upstream feed is currently empty."
+                    notices += "${source.name}：上游当前为空。"
                 outcome.candidates.isEmpty() && outcome.reachable ->
-                    notices += "${source.name}: no keybox passed local validation."
+                    notices += "${source.name}：没有 keybox 通过本地校验。"
                 else -> Unit
             }
         }
@@ -132,11 +193,11 @@ internal object KeyboxPoolRepository {
 
     /** Human-readable reason for a failed source, without echoing any response bytes. */
     private fun reasonOf(error: Exception?): String = when {
-        error == null -> "no address reachable."
-        error is java.net.UnknownHostException -> "DNS failed; every mirror address is unreachable."
-        error is java.net.SocketTimeoutException -> "connection timed out."
-        error is java.io.IOException -> "network error."
-        else -> "fetch or safe XML validation failed."
+        error == null -> "所有地址都连不上。"
+        error is java.net.UnknownHostException -> "域名解析失败，所有镜像地址都不通。"
+        error is java.net.SocketTimeoutException -> "连接超时。"
+        error is java.io.IOException -> "网络错误。"
+        else -> "下载或安全解析失败。"
     }
 
     private suspend fun fetchOne(source: Source, url: String): SourceResult {
@@ -181,7 +242,7 @@ internal object KeyboxPoolRepository {
                 currentCoroutineContext().ensureActive()
                 if (accepted.size >= LIMIT) break
                 try {
-                    accepted += validate(box, source, url, response.header("Last-Modified"))
+                    accepted += validate(box, source.name, url, response.header("Last-Modified"))
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
@@ -225,7 +286,7 @@ internal object KeyboxPoolRepository {
         return requireNotNull(root)
     }
 
-    private fun validate(box: Node, source: Source, sourceUrl: String, modified: String?): Candidate {
+    private fun validate(box: Node, sourceName: String, sourceUrl: String, modified: String?): Candidate {
         check(box.children.all { it.name == "Key" } && box.text.isBlank())
         check(box.attrs.keys.all { it == "DeviceID" })
         val keys = box.children.filter { it.name == "Key" }
@@ -302,7 +363,7 @@ internal object KeyboxPoolRepository {
         val safeModified = modified?.takeIf {
             it.matches(Regex("[A-Za-z]{3}, [0-9]{2} [A-Za-z]{3} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT"))
         }
-        return Candidate(id, source.name, sourceUrl, System.currentTimeMillis(), safeModified,
+        return Candidate(id, sourceName, sourceUrl, System.currentTimeMillis(), safeModified,
             certificates.maxOf { it.notBefore.time }, certificates.minOf { it.notAfter.time }, keys.size,
             writer.toString().toByteArray(Charsets.UTF_8))
     }

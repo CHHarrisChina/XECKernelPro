@@ -26,7 +26,6 @@ import me.weishu.kernelsu.ui.screen.home.HomeUiState
 import me.weishu.kernelsu.ui.screen.home.SystemInfo
 import me.weishu.kernelsu.ui.screen.home.XecScore
 import me.weishu.kernelsu.ui.screen.home.getManagerVersion
-import me.weishu.kernelsu.widget.XecQuickTileService
 import me.weishu.kernelsu.widget.XecScoreWidgetProvider
 import me.weishu.kernelsu.widget.XecWidgetSnapshot
 import me.weishu.kernelsu.widget.XecWidgetStore
@@ -159,7 +158,6 @@ class HomeViewModel(
                     ),
                 )
                 XecScoreWidgetProvider.updateAll(ksuApp)
-                XecQuickTileService.requestUpdate(ksuApp)
             }
         }
     }

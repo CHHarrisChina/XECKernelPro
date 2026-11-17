@@ -1,6 +1,6 @@
 # 更新日志
 
-本文件记录 XECKernelPro 管理器的用户可见变更。历史版本由 CI 的 `generate_release_notes` 自动汇总，本文从全局 UI 重写（XEC Fluid Glass）开始做人工整理。
+本文件记录 XECKernel Ultra 管理器的用户可见变更。历史版本由 CI 的 `generate_release_notes` 自动汇总，本文从全局 UI 重写（XEC Fluid Glass）开始做人工整理。
 
 ---
 
@@ -79,7 +79,7 @@
 - **但保留注入链修复**：运行期开引擎会重打 keystore 侧 sepolicy、`ksud builtin repair`
   与「修复引擎」按钮、注入/启动/策略三行诊断 —— 没有这些，v31128 之后那套开关下的引擎
   根本起不来（这正是当时"内置模块无法启动"的根因）。
-- 两个模块 zip 仍随 Release 发布（`XECKernelPro-TEE-module.zip` / `-TA-module.zip`），
+- 两个模块 zip 仍随 Release 发布（`XECKernel Ultra-TEE-module.zip` / `-TA-module.zip`），
   想当普通模块用的人可以自己刷；管理器不再推这条路。
 
 
@@ -102,7 +102,7 @@ tmpfs 运行目录、keystore 侧 sepolicy 规则），再叠加"开机把 ro.bo
 - **用户自己刷进来的模块不受该开关约束**（模块目录在 `/data/adb/modules/` 下即为外部形态）：
   刷了就是要它跑 —— 两种形态互不干扰，内置那份检测到外部模块在位时照旧让位。
 - **改为外部分发 + 一键刷入**：CI 在 `ksud.yml` 里把两棵模块树打成**普通模块 zip**
-  （`XECKernelPro-TEE-module.zip` / `XECKernelPro-TA-module.zip`），随 Release 发布并镜像到
+  （`XECKernel Ultra-TEE-module.zip` / `XECKernel Ultra-TA-module.zip`），随 Release 发布并镜像到
   自建网盘 `/modules/`；检测页新增「按需安装（推荐）」区，两个按钮 → 下载 → 交给 ksud 安装
   → 重启生效。装完之后它就是一个**普通模块**：模块列表里看得见、能停用、能卸载。
 - **开机环境伪装改成用户开关、默认关闭**：`ksud builtin spoof on|off` + 检测页第三个开关。

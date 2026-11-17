@@ -106,7 +106,7 @@ object ThemeStoreSettings {
      *
      * 查询串对 jsDelivr 的文件解析没有影响，镜像推导（[StoreMirrors]）也会原样带上它。
      */
-    private const val INDEX_CACHE_TAG = "?v=3"
+    private const val INDEX_CACHE_TAG = "?v=4"
 
     const val DEFAULT_URL =
         "https://cdn.jsdelivr.net/gh/byBOOK10086/XECKernelPro-Themes@main/themes.json$INDEX_CACHE_TAG"

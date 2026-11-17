@@ -610,7 +610,7 @@ fun flashModule(
         // 内核态一个字都不改：还是 ksud。
         val cmd = "${getKsuDaemonPath()} module install ${file.absolutePath}"
         val result = flashWithIO(cmd, onStdout, onStderr)
-        Log.i("XECKernelPro", "install module $uri result: $result")
+        Log.i("XECKernel Ultra", "install module $uri result: $result")
 
         file.delete()
 
@@ -647,7 +647,7 @@ private fun extractAnyKernelUpdater(zip: File, dest: File): Boolean {
         }
         dest.length() > 0L
     } catch (e: Throwable) {
-        Log.e("XECKernelPro", "extract update-binary failed", e)
+        Log.e("XECKernel Ultra", "extract update-binary failed", e)
         false
     }
 }
@@ -704,7 +704,7 @@ fun flashAnyKernel(
             "export PATH=\"\$W/bin:/system/bin:/system/xbin:\$PATH\"; " +
             "\"\$BB\" ash \"\$W/update-binary\" 3 1 '$zipPath'"
         val result = flashWithIO(cmd, onStdout, onStderr)
-        Log.i("XECKernelPro", "flash anykernel3 $uri result: $result")
+        Log.i("XECKernel Ultra", "flash anykernel3 $uri result: $result")
         FlashResult(result)
     } finally {
         workDir.deleteRecursively()
@@ -731,7 +731,7 @@ fun runModuleAction(
             .to(stdoutCallback, stderrCallback).exec()
     }
 
-    Log.i("XECKernelPro", "Module runAction result: $result")
+    Log.i("XECKernel Ultra", "Module runAction result: $result")
 
     return result.isSuccess
 }
@@ -849,7 +849,7 @@ fun installBoot(
     }
 
     val result = flashWithIO("${getKsuDaemonPath()} $cmd", onStdout, onStderr)
-    Log.i("XECKernelPro", "install boot result: ${result.isSuccess}")
+    Log.i("XECKernel Ultra", "install boot result: ${result.isSuccess}")
 
     bootFile?.delete()
     lkmFile?.delete()

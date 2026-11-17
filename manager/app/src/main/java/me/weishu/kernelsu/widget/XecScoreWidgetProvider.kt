@@ -10,8 +10,7 @@ import android.widget.RemoteViews
 import com.xecpro.kernel.XecIntents
 import me.weishu.kernelsu.R
 
-/** Home-screen XEC Score card. Tapping it opens the manager; the hide button
- *  opens the existing OneTapHide flow (which asks for confirmation itself). */
+/** Home-screen XEC Score card. Tapping it opens the manager. */
 class XecScoreWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
@@ -40,7 +39,6 @@ class XecScoreWidgetProvider : AppWidgetProvider() {
                     snapshot.detail.ifBlank { context.getString(R.string.xec_widget_detail_empty) },
                 )
                 setOnClickPendingIntent(R.id.widget_root, homePendingIntent(context))
-                setOnClickPendingIntent(R.id.widget_hide, hidePendingIntent(context))
             }
             manager.updateAppWidget(ids, views)
         }
@@ -53,12 +51,5 @@ class XecScoreWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
-        private fun hidePendingIntent(context: Context): PendingIntent =
-            PendingIntent.getActivity(
-                context,
-                0xEC11,
-                XecIntents.oneTapHide(context),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
     }
 }

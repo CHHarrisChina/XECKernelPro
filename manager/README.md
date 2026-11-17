@@ -1,6 +1,6 @@
-# XECKernelPro Manager
+# XECKernel Ultra Manager
 
-Jetpack Compose + Miuix manager for XECKernelPro. The UI follows the MIUI 8
+Jetpack Compose + Miuix manager for XECKernel Ultra. The UI follows the MIUI 8
 design logic: a light-grey page under white grouped panels separated by 1px
 lines, with square 2–6dp corners and the MIUI orange accent. Module, repo,
 theming and TEE/TA surfaces sit on top of that token layer.
@@ -21,7 +21,7 @@ Requirements:
 ```bash
 cd manager
 ./gradlew :app:assembleDebug
-# output: app/build/outputs/apk/debug/XECKernelPro_<version>_<code>-debug.apk
+# output: app/build/outputs/apk/debug/XECKernel Ultra_<version>_<code>-debug.apk
 ```
 
 For a local UI-only compile, `:app:compileDebugKotlin` does not need the daemon

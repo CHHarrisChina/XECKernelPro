@@ -11,7 +11,7 @@
     <string name="home_lkm_update_available">内嵌 LKM 有可用更新，点击更新</string>
     <string name="home_lkm_custom">自定义</string>
     <string name="home_unsupported">不支持</string>
-    <string name="home_unsupported_reason">XECKernel Pro 现在只支持 GKI 内核，但是你可以为 GKI 设备补丁镜像</string>
+    <string name="home_unsupported_reason">XECKernel Ultra 现在只支持 GKI 内核，但是你可以为 GKI 设备补丁镜像</string>
     <string name="home_device_model">设备型号</string>
     <string name="home_tee_engine">TEE 实现</string>
     <string name="home_tee_engine_value">内置 · TEESimulator</string>
@@ -116,9 +116,9 @@
     <string name="safe_mode_module_disabled">处于安全模式下，禁止安装模块</string>
     <string name="reboot_to_apply">重启生效</string>
     <string name="module_magisk_conflict">因与 Magisk 有冲突，所有模块不可用！</string>
-    <string name="home_learn_kernelsu">了解 XECKernel Pro</string>
+    <string name="home_learn_kernelsu">了解 XECKernel Ultra</string>
     <string name="home_learn_kernelsu_url">https://github.com/byBOOK10086/XECKernelPro</string>
-    <string name="home_click_to_learn_kernelsu">了解如何安装 XECKernel Pro 以及如何开发模块</string>
+    <string name="home_click_to_learn_kernelsu">了解如何安装 XECKernel Ultra 以及如何开发模块</string>
     <string name="home_support_title">开发者名单</string>
     <string name="home_support_content">项目开发者及贡献者名单（官方公示）</string>
     <string name="home_developers_list"><![CDATA[
@@ -194,7 +194,7 @@ XEC 项目组
     <string name="require_kernel_version_gki">需要更新内核</string>
     <string name="settings_umount_modules_default">默认卸载模块</string>
     <string name="settings_umount_modules_default_summary">App Profile 中「卸载模块」的全局默认值，如果启用，会将未自定义 Profile 的应用移除所有模块针对系统的修改</string>
-    <string name="profile_umount_modules_summary">启用该选项后将允许 XECKernel Pro 为本应用还原被模块修改过的文件</string>
+    <string name="profile_umount_modules_summary">启用该选项后将允许 XECKernel Ultra 为本应用还原被模块修改过的文件</string>
     <string name="profile_selinux_domain">域</string>
     <string name="profile_selinux_rules">规则</string>
     <string name="recently_installed">最近安装</string>
@@ -254,7 +254,7 @@ XEC 项目组
     <string name="install_inactive_slot">安装到未使用的槽位（OTA 后）</string>
     <string name="install_anykernel">刷入 AnyKernel3 内核包</string>
     <string name="install_anykernel_tip">刷入第三方 AnyKernel3 压缩包（如 GKI 内核）</string>
-    <string name="install_requires_root">直接刷写分区需要 root 权限。请先安装并激活 XECKernel Pro，再重新打开本应用。</string>
+    <string name="install_requires_root">直接刷写分区需要 root 权限。请先安装并激活 XECKernel Ultra，再重新打开本应用。</string>
     <string name="install_requires_gki">直接刷写（含 AnyKernel3）需要 GKI 内核（5.10 及以上）。本设备请改用镜像修补方式。</string>
     <string name="root_mode_kernel">当前 root 形态：内核态（原版 KernelSU / LKM，5.10+）</string>
     <string name="root_mode_mount">当前 root 形态：挂载态（KernelPatch 注入 + 挂载，5.10 以下）· 与内核态互斥不会共存</string>
@@ -271,9 +271,9 @@ XEC 项目组
     <string name="settings_uninstall_temporary">临时卸载</string>
     <string name="settings_uninstall_permanent">永久卸载</string>
     <string name="settings_restore_stock_image">恢复原厂镜像</string>
-    <string name="settings_uninstall_temporary_message">临时卸载 XECKernel Pro，下次重启后恢复至原始状态</string>
-    <string name="settings_uninstall_permanent_message">完全并永久卸载 XECKernel Pro（Root 权限和所有模块）</string>
-    <string name="settings_restore_stock_image_message">恢复原厂镜像（若存在备份），一般在 OTA 前使用；如果你需要卸载 XECKernel Pro，请使用「永久卸载」</string>
+    <string name="settings_uninstall_temporary_message">临时卸载 XECKernel Ultra，下次重启后恢复至原始状态</string>
+    <string name="settings_uninstall_permanent_message">完全并永久卸载 XECKernel Ultra（Root 权限和所有模块）</string>
+    <string name="settings_restore_stock_image_message">恢复原厂镜像（若存在备份），一般在 OTA 前使用；如果你需要卸载 XECKernel Ultra，请使用「永久卸载」</string>
     <string name="flashing">刷写中</string>
     <string name="flash_success">刷写完成</string>
     <string name="flash_failed">刷写失败</string>
@@ -394,13 +394,13 @@ XEC 项目组
     <string name="sort_by_install_time">安装时间</string>
     <string name="sort_by_update_time">更新时间</string>
     <string name="sort_reverse">倒序</string>
-    <string name="profile_flags_desc_no_new_privs">禁止从此 Root Profile 的上下文中通过 XECKernel Pro 进一步提升权限</string>
+    <string name="profile_flags_desc_no_new_privs">禁止从此 Root Profile 的上下文中通过 XECKernel Ultra 进一步提升权限</string>
     <string name="module_shortcut_copy_scheme">复制 URL Scheme</string>
     <string name="module_shortcut_scheme_copied">已复制 URL Scheme</string>
     <string name="install_force_backup">备份为原厂镜像</string>
     <string name="install_force_backup_summary">请确保你选择的 boot 镜像是原厂镜像</string>
     <string name="settings_sulog">SU 日志</string>
-    <string name="settings_sulog_summary">将 Root 相关事件记录到 XECKernel Pro 的 SU 日志文件中</string>
+    <string name="settings_sulog_summary">将 Root 相关事件记录到 XECKernel Ultra 的 SU 日志文件中</string>
     <string name="sulog_log_files">日志文件</string>
     <string name="sulog_failed_to_load">加载 SU 日志失败</string>
     <string name="sulog_disabled_title">SU 日志未启用</string>
@@ -675,7 +675,7 @@ XEC 项目组
     <string name="magisk_su_version_unknown">未检测到</string>
     <string name="magisk_su_self_label">本管理器的 root</string>
     <string name="magisk_su_self_granted">已授权（能读到策略表）</string>
-    <string name="magisk_su_self_denied">还没授权 —— 请在 Magisk 应用里批准 XECKernelPro</string>
+    <string name="magisk_su_self_denied">还没授权 —— 请在 Magisk 应用里批准 XECKernel Ultra</string>
     <string name="magisk_su_zygisk">Zygisk</string>
     <string name="magisk_su_zygisk_summary">由 magiskd 在开机时装载：改完要重启才生效。</string>
     <string name="magisk_su_denylist">启用 DenyList</string>
@@ -822,7 +822,7 @@ XEC 项目组
     <string name="xec_share_device" tools:ignore="MissingTranslation">设备</string>
     <string name="xec_share_not_available" tools:ignore="MissingTranslation">未检测</string>
     <string name="xec_share_checks" tools:ignore="MissingTranslation">检查项</string>
-    <string name="xec_share_footer" tools:ignore="MissingTranslation">XECKernelPro · 本地生成，不上传任何数据</string>
+    <string name="xec_share_footer" tools:ignore="MissingTranslation">XECKernel Ultra · 本地生成，不上传任何数据</string>
 
     <!-- Home appearance editor -->
     <string name="home_appearance_edit" tools:ignore="MissingTranslation">编辑外观</string>
@@ -920,7 +920,7 @@ XEC 项目组
     <string name="superkey_settings_summary">开启后，改动任何应用的 Root 权限都要先输入锁密码，防止恶意软件偷改权限</string>
     <!-- 工具箱：终端 / 安全锁 / 隐身入口 的统一菜单 -->
     <string name="tools_title">工具箱</string>
-    <string name="tools_summary">终端、安全锁与隐身入口</string>
+    <string name="tools_summary">密钥池、引擎 WebUI 与隐身入口</string>
     <string name="tools_terminal_title">终端</string>
     <string name="tools_terminal_summary">带文件管理的命令行终端</string>
     <!-- 模式牌（root 方式显示）自定义：关键词系统生成不可改，可改前后缀/底图/字体/颜色 -->
