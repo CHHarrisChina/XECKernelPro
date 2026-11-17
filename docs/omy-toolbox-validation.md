@@ -32,3 +32,16 @@
 - 未做真机验证：外部 KernelSU 授权（GKI/非 GKI）、Magisk 设备、OMY 引擎实际注入、密钥池导入与重启后提供者恢复。
 - 密钥池两路上游在本机取数超时，未声明当前可用候选数量。
 - 证书在有效期内、私钥匹配、链签名自洽，不等于未被吊销或被证明服务接受。
+
+## 31434：31433 真机五条反馈
+
+| 反馈 | 根因 | 修复 |
+|---|---|---|
+| 重启按钮不生效 | 点击回调在主线程，拿到的是**非 root 兜底 sh**，`svc power reboot` 被拒且无反馈 | `reboot()` 起工作线程；新建经 `id -u == 0` 验证的 shell，`svc` → `reboot` → `sys.powerctl` 三级兜底，全失败 Toast |
+| TEE 引擎首次不启动 | 注入探针读不到 `/proc/<pid>/maps` 返回 `null`，旧代码把 `null` 当健康 → 自愈永不触发 | 判据拆成「树/进程快照」+ 注入探针；任一证明坏了才修，修不来先 `builtin install` 再重试；结果 Toast |
+| 越狱模式显示错误 | `isLateLoadMode` 只在驱动已注入时为真，重启后必为 false → 首页显示"未安装内核" | 持久化 `lateLoadSeen`；首页新增「需要越狱／越狱未激活」状态，整卡点击直接走 Magica / AutoReplay 恢复链 |
+| 主题商店在国外 | 索引与包都在 jsDelivr / raw.githubusercontent.com（raw 被连接重置、jsDelivr 遭 TLS 中间人） | 镜像到自建服务器 OpenList `/d/themes/`（4 主题、18 个 URL 全量重写），管理器内置源**先试国内**，jsDelivr/raw 仍作回落 |
+| 越狱用户自动关闭 TEE 引擎 | 内置树只在 `on_post_data_fs` 安装；`late_load::run` 从不安装也不加载内置 sepolicy | `late_load.rs` 补 `install_builtin_modules()` 与 `load_sepolicy_rules()` |
+
+国内镜像校验：`http://42.193.123.248:5244/d/themes/themes.json?v=3` 返回 4 个主题、18 个链接全部指向国内，镜像包的 sha256 与索引声明一致（安装时的校验能过）。镜像脚本 `_scratch/theme_mirror.py`（fetch/rewrite/upload/verify 四步幂等）。
+
