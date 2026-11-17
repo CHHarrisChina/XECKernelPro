@@ -227,6 +227,15 @@ class HomeViewModel(
         }.getOrNull() else null
         val managerVersion = getManagerVersion(ksuApp)
 
+        // 越狱形态是"用过就一直算"：开机后内核模块还没注入时 isLateLoadMode 一定是 false，
+        // 只有把这个事实记下来，首页才不会把越狱设备报成"未安装内核"。
+        val lateLoadSeen = runCatching {
+            if (Natives.isLateLoadMode && !settingsRepo.lateLoadSeen) {
+                settingsRepo.lateLoadSeen = true
+            }
+            settingsRepo.lateLoadSeen || Natives.isLateLoadMode
+        }.getOrDefault(Natives.isLateLoadMode)
+
         return HomeUiState(
             kernelVersion = kernelVersion,
             ksuVersion = ksuVersion,
@@ -243,6 +252,7 @@ class HomeViewModel(
             isRootAvailable = isRootAvailable,
             isSafeMode = Natives.isSafeMode,
             isLateLoadMode = Natives.isLateLoadMode,
+            lateLoadSeen = lateLoadSeen,
             isDaemonPresent = isDaemonPresent,
             susfsVersion = susfsVersion,
             susfsVariant = susfsVariant,

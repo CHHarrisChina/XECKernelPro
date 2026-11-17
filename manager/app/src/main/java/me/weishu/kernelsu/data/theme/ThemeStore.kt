@@ -113,6 +113,21 @@ object ThemeStoreSettings {
     const val RAW_FALLBACK_URL =
         "https://raw.githubusercontent.com/byBOOK10086/XECKernelPro-Themes/main/themes.json$INDEX_CACHE_TAG"
 
+    /**
+     * 国内镜像（2026-11-17 用户要求"主题商店搬到国内，不要放在国外"）。
+     *
+     * 索引与主题包都托管在我们自己的服务器（OpenList `/d/themes/`），索引里的
+     * `downloadUrl`/预览图已经在镜像时重写成国内直链。用内置源时**先试它**：
+     * 国内可达性远好于 jsDelivr，也不依赖境外 CDN 的证书链（真机上 raw 被连接重置、
+     * jsDelivr 被 TLS 中间人打断，商城直接空列表）。
+     *
+     * 镜像里的内容由 `_scratch/theme_mirror.py` 生成；它 404 或超时会照常回落到
+     * jsDelivr / raw，所以"国内镜像还没铺好"不会把商城弄挂。
+     */
+    const val CN_MIRROR_URL = "http://42.193.123.248:5244/d/themes/themes.json$INDEX_CACHE_TAG"
+
+    private fun isDomestic(url: String) = url.contains("42.193.123.248") && url.contains("/themes/")
+
     private const val PREFS = "settings"
     private const val KEY_URL = "theme_store_url"
 
@@ -131,19 +146,22 @@ object ThemeStoreSettings {
     /**
      * 依次尝试的索引地址。
      *
-     * 用内置源时：jsDelivr → 推导出的镜像 → 官方 raw 地址兜底（最后一道，写死的那条）。
+     * 用内置源时：**国内镜像 → jsDelivr → 推导出的镜像 → 官方 raw 地址兜底**。
      * 用户自己填了源时：**只试他自己那个源的镜像**，绝不偷偷回退到官方索引 ——
      * 否则"我的源挂了"会变成"怎么冒出别人的主题列表"，这是拿用户的信任换可用性。
      */
     fun sources(): List<String> {
         val primary = primaryUrl
-        val mirrors = LinkedHashSet(StoreMirrors.candidates(primary))
+        val mirrors = LinkedHashSet<String>()
+        if (builtIn) mirrors += CN_MIRROR_URL
+        mirrors += StoreMirrors.candidates(primary)
         if (mirrors.isEmpty()) mirrors += primary
         if (builtIn) mirrors += RAW_FALLBACK_URL
         return mirrors.toList()
     }
 
     fun labelOf(url: String): String = when {
+        isDomestic(url) -> "XEC 主题仓库（国内镜像）"
         url.contains("XECKernelPro-Themes") && url.contains("jsdelivr") -> "XEC 主题仓库（jsDelivr）"
         url.contains("XECKernelPro-Themes") && url.contains("raw.githubusercontent") ->
             "XEC 主题仓库（GitHub raw）"

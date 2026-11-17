@@ -18,7 +18,9 @@ import me.weishu.kernelsu.data.repository.SettingsRepositoryImpl
 import me.weishu.kernelsu.ksuApp
 import me.weishu.kernelsu.privilege.SuperkeyStore
 import me.weishu.kernelsu.ui.screen.settings.SettingsUiState
+import me.weishu.kernelsu.ui.screen.settings.TeeDiagnostics
 import me.weishu.kernelsu.ui.theme.ColorMode
+import me.weishu.kernelsu.ui.util.TeeEngineStartup
 import me.weishu.kernelsu.ui.util.applyTeeEngineSwitch
 import me.weishu.kernelsu.ui.util.rebootDevice
 import me.weishu.kernelsu.ui.util.teeEngineEnabled
@@ -350,8 +352,10 @@ class SettingsViewModel(
     /**
      * 内置 TEE/TS 引擎总开关。
      *
-     * 引擎只在开机路径上注入，所以改完**立即重启**：不重启用户会看到开关变了、行为没变，
-     * 反而以为功能坏了。root 不受影响（引擎是纯用户态注入，不是内核模块）。
+     * 打开时**先就地拉起**，成功就不重启：`builtin start` 会自己落盘、起两个守护并让
+     * keystore2 重新注入 —— 用户点完开关马上就有引擎，不用等下一次开机（真机反馈
+     * 「TEE 引擎首次不启动」有一半是"打开了但这一轮开机没跑过 service 阶段"）。
+     * 拉起失败才退回原来的"保存 + 重启"路径，并且失败原因会写成 Toast，不再静默。
      */
     fun setTeeEngineEnabled(enabled: Boolean) {
         if (!ensureSuperkey()) return
@@ -367,6 +371,15 @@ class SettingsViewModel(
                 return@launch
             }
             _uiState.update { it.copy(isTeeEngineEnabled = enabled) }
+            if (!enabled) return@launch
+            val started = TeeDiagnostics.restartEngine(null).getOrDefault(false)
+            if (started) {
+                TeeEngineStartup.markStartedByUser()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(ksuApp, R.string.settings_tee_engine_started, Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
             if (!rebootDevice()) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(ksuApp, R.string.settings_reboot_failed, Toast.LENGTH_LONG).show()

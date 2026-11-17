@@ -1,6 +1,9 @@
 package me.weishu.kernelsu.ui.screen.home
 
 import android.os.Build
+import android.content.Intent
+import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
@@ -98,6 +101,9 @@ import me.weishu.kernelsu.ui.component.WarningLevel
 import me.weishu.kernelsu.ui.component.dialog.XDialog
 import me.weishu.kernelsu.ui.component.dialog.XDialogTitle
 import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
+import com.xecpro.kernel.XecMagicaService
+import me.weishu.kernelsu.privilege.AutoReplayService
+
 import me.weishu.kernelsu.ui.component.miuix.WarningCard
 import me.weishu.kernelsu.ui.component.rebootlistpopup.RebootListPopupMiuix
 import me.weishu.kernelsu.ui.design.glass.rememberXcBlock
@@ -249,6 +255,8 @@ fun HomePagerMiuix(
                         WarningCard(stringResource(id = R.string.home_daemon_missing), block = warningBlock)
                     }
 
+                    // 越狱恢复入口要用的 context 只能在组合里取，先拿到再进 lambda。
+                    val heroContext = LocalContext.current.applicationContext
                     HomeHeroCard(
                         state = state,
                         inputs = HomeStatInputs(
@@ -259,6 +267,27 @@ fun HomePagerMiuix(
                         ),
                         onInstall = actions.onInstallClick,
                         onEdit = { showStatEditor = true },
+                        onJailbreak = {
+                            // 与 BootCompletedReceiver 同一条恢复链：Magica 优先，
+                            // 不行时由 AutoReplayService 收尾。两条都只是 start，
+                            // 没有 root 时也不会崩。
+                            runCatching {
+                                heroContext.startService(
+                                    Intent(heroContext, XecMagicaService::class.java),
+                                )
+                            }
+                            runCatching {
+                                ContextCompat.startForegroundService(
+                                    heroContext,
+                                    Intent(heroContext, AutoReplayService::class.java),
+                                )
+                            }
+                            Toast.makeText(
+                                heroContext,
+                                R.string.jailbreak_resume_started,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        },
                     )
 
                     if (state.checkUpdateEnabled) {
@@ -385,6 +414,7 @@ private fun HomeHeroCard(
     inputs: HomeStatInputs,
     onInstall: () -> Unit,
     onEdit: () -> Unit,
+    onJailbreak: () -> Unit,
 ) {
     val external = state.externalKernelSu
     // 外部内核（上游 KernelSU）里内核确实在跑，只是本包不是它认的管理器：
@@ -398,27 +428,34 @@ private fun HomeHeroCard(
     val canInstall = !running && state.isRootAvailable
     // 冷启动/刚重启那段，root 探测还没落定：灰点 + 「正在获取 Root」，不画红点。
     val probing = !state.rootProbeSettled
+    // 越狱设备重启后：内核模块还没注入、root 也没起来，但**这台机器本来就是越狱形态**。
+    // 以前这里落到「未安装内核」，让用户以为要重刷；现在单独给一个"等待重新越狱"状态，
+    // 整块就是入口（点一下重新走 late-load）。
+    val jailbreakPending = state.lateLoadSeen && !state.isLateLoadMode && !running && !active && !probing
     val statusLabel = when {
         external -> R.string.home_hero_external_status
+        jailbreakPending -> R.string.home_hero_jailbreak_status
         active -> R.string.home_hero_ready
         probing -> R.string.home_hero_probing
         else -> R.string.home_hero_idle
     }
     val statusColor = when {
         external -> Xc.colors.success
+        jailbreakPending -> Xc.colors.success
         active -> Xc.colors.success
         probing -> Xc.colors.textMuted
         else -> Xc.colors.danger
     }
     val title = when {
         external -> stringResource(R.string.home_hero_external_title)
+        jailbreakPending -> stringResource(R.string.home_hero_jailbreak_title)
         running -> stringResource(R.string.home_hero_running)
         canInstall -> stringResource(R.string.home_hero_ready_title)
         else -> stringResource(R.string.home_hero_inactive)
     }
     val modeText = when {
         external -> "KernelSU"
-        state.isLateLoadMode -> stringResource(R.string.jailbreak_mode)
+        state.isLateLoadMode || state.lateLoadSeen -> stringResource(R.string.jailbreak_mode)
         state.lkmMode == true -> "LKM"
         running -> stringResource(R.string.home_hero_kernel_mode)
         else -> stringResource(R.string.home_not_installed)
@@ -428,6 +465,7 @@ private fun HomeHeroCard(
     val selinuxText = selinuxLabel(state.systemInfo.selinuxStatus)
     val subtitle = when {
         external -> stringResource(R.string.home_hero_external_subtitle)
+        jailbreakPending -> stringResource(R.string.home_hero_jailbreak_subtitle)
         canInstall -> stringResource(R.string.home_hero_ready_subtitle)
         else -> "$modeText · SELinux $selinuxText"
     }
@@ -530,8 +568,9 @@ private fun HomeHeroCard(
             }
             Spacer(Modifier.height(10.dp))
             // 标题行：整行可点 = 进刷入页（沿用 2026-11-09 的定案）。
+            // 越狱待激活时这一下改成"重新越狱"——那才是用户此刻真正需要的动作。
             Row(
-                modifier = Modifier.clickable(onClick = onInstall),
+                modifier = Modifier.clickable(onClick = if (jailbreakPending) onJailbreak else onInstall),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(

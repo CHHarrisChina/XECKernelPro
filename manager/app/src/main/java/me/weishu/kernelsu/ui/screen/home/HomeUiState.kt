@@ -26,6 +26,13 @@ data class HomeUiState(
     val isRootAvailable: Boolean,
     val isSafeMode: Boolean,
     val isLateLoadMode: Boolean,
+    /**
+     * 这台设备曾经在越狱（late-load）形态下跑过（持久化标记）。
+     *
+     * 重启后 [isLateLoadMode] 必然是 false（内核模块还没注入），只看它会把越狱设备
+     * 显示成"未安装内核"。两者结合才能区分「越狱设备等待重新越狱」与「真没装」。
+     */
+    val lateLoadSeen: Boolean = false,
     val isDaemonPresent: Boolean,
     val susfsVersion: String?,
     val susfsVariant: String?,

@@ -186,6 +186,10 @@ class SettingsRepositoryImpl : SettingsRepository {
             }
         }
 
+    override var lateLoadSeen: Boolean
+        get() = prefs.getBoolean("late_load_seen", false)
+        set(value) = prefs.edit { putBoolean("late_load_seen", value) }
+
     override var useSoftReboot: Boolean
         get() = prefs.getBoolean(KEY_USE_SOFT_REBOOT, false)
         set(value) = prefs.edit { putBoolean(KEY_USE_SOFT_REBOOT, value) }

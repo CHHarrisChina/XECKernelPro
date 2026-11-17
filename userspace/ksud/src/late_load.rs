@@ -97,6 +97,14 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Res
 
     utils::install(None, None).context("Failed to install ksud")?;
 
+    // 2026-11-17 真机反馈「越狱用户自动关闭 TEE 引擎」：late-load 不经过
+    // `on_post_data_fs`，而内置树**只在那里装**。于是越狱设备上
+    // /data/adb/ksu/builtin/{tricky_store,TA_enhanced} 一直是空的，service 阶段无脚本
+    // 可跑，keystore2 永远不被注入 —— 表现就是"引擎自己关了"。这里按开机同款步骤补装。
+    if let Err(e) = crate::builtin::install_builtin_modules() {
+        warn!("install built-in modules failed during late-load: {e:#}");
+    }
+
     let module_mutation_lock = crate::module::lock_install_mutations()?;
     crate::module::recover_install_guards().context("late-load install recovery failed")?;
     crate::hot_install::clean_trash();
@@ -147,6 +155,12 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Res
     // 6. Load SELinux rules
     if crate::module::load_sepolicy_rule().is_err() {
         warn!("load sepolicy.rule failed");
+    }
+
+    // 内置树自己的 sepolicy.rule 与开机路径同款：少了它，引擎在 keystore2 里的
+    // 注入会被 SELinux 拒掉，而日志上只看到"注入没生效"。
+    if let Err(e) = crate::builtin::load_sepolicy_rules() {
+        warn!("load built-in sepolicy rules failed during late-load: {e}");
     }
 
     if let Err(e) = crate::profile::apply_sepolies() {

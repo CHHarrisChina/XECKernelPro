@@ -5,12 +5,14 @@ import android.content.Context
 import android.database.Cursor
 import android.net.Uri
 import android.os.Environment
+import android.os.Handler
 import android.os.Looper
 import android.os.Parcelable
 import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.system.Os
 import android.util.Log
+import android.widget.Toast
 import com.topjohnwu.superuser.CallbackList
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.ShellUtils
@@ -23,6 +25,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 import me.weishu.kernelsu.BuildConfig
 import me.weishu.kernelsu.Natives
+import me.weishu.kernelsu.R
 import me.weishu.kernelsu.deviceKmi
 import me.weishu.kernelsu.core.tasks.BootKernelVersion
 import me.weishu.kernelsu.core.tasks.ExtractImage
@@ -1007,28 +1010,62 @@ fun reboot(reason: String = "") {
         // 路线上根本不存在。不能"叫了就当成功"—— 用户勾了"用软重启代替重启"、装完模块，
         // 结果什么都没发生。挂载态直接退回**真重启**：reason 传空串，别让 init 收到
         // "soft_reboot" 这种它不认识的 reason（内核态行为一个字不改）。
-        val ok = execKsud("soft-reboot", true, true)
-        Log.i(TAG, "ksud soft-reboot result: $ok")
-        if (ok) return
-        // 2026-11-13 (audit F14): this comment promised a fallback but the code
-        // just returned, so on a build without the driver or with a mismatched
-        // UAPI the user saw "soft reboot" and the device stayed up. Do what the
-        // comment says: fall back to a real reboot, and tell the log why.
-        Log.i(TAG, "soft-reboot unavailable, falling back to a real reboot")
-        rebootNow("")
+        Thread({
+            val ok = runCatching { execKsud("soft-reboot", true, true) }.getOrDefault(false)
+            Log.i(TAG, "ksud soft-reboot result: $ok")
+            if (!ok) {
+                // 2026-11-13 (audit F14): this comment promised a fallback but the code
+                // just returned, so on a build without the driver or with a mismatched
+                // UAPI the user saw "soft reboot" and the device stayed up.
+                Log.i(TAG, "soft-reboot unavailable, falling back to a real reboot")
+                if (!rebootVerified("")) toastRebootFailed()
+            }
+        }, "xecpro-soft-reboot").apply { isDaemon = true }.start()
         return
     }
-    rebootNow(reason)
+    Thread({ if (!rebootVerified(reason)) toastRebootFailed() }, "xecpro-reboot")
+        .apply { isDaemon = true }.start()
 }
 
-/** [reboot] 的真重启尾巴（挂载态的 `soft_reboot` 也落到这里）。 */
-private fun rebootNow(reason: String) {
-    val shell = getRootShell()
-    if (reason == "recovery") {
-        // KEYCODE_POWER = 26, hide incorrect "Factory data reset" message
-        ShellUtils.fastCmd(shell, "/system/bin/input keyevent 26")
+/**
+ * [reboot] 的真重启尾巴。调用方必须在工作线程上。
+ *
+ * 2026-11-17 真机反馈「重启按钮不生效」的两条根因都在这里收掉：
+ *  1. 旧实现直接 `getRootShell()`：点击回调在主线程，而主线程只拿得到**非 root 的兜底
+ *     sh**（探测被刻意挡在主线程外），于是 `svc power reboot` 被拒，设备毫无反应；
+ *  2. 失败完全静默。现在改为**新建**一条经 `id -u == 0` 验证的 root shell（不吃缓存），
+ *     按 svc → reboot → sys.powerctl 三级兜底，全失败就弹一次 Toast，不再"点了没动静"。
+ */
+private fun rebootVerified(reason: String): Boolean {
+    val safeReason = reason.takeIf { it.matches(Regex("^[a-z0-9_]{0,16}$")) }.orEmpty()
+    val shell = runCatching { createRootShell(globalMnt = false) }.getOrNull()
+    if (shell == null) {
+        Log.w(TAG, "reboot: no verified root shell available")
+        return false
     }
-    ShellUtils.fastCmd(shell, "/system/bin/svc power reboot $reason || /system/bin/reboot $reason")
+    if (safeReason == "recovery") {
+        // KEYCODE_POWER = 26, hide incorrect "Factory data reset" message
+        runCatching { ShellUtils.fastCmd(shell, "/system/bin/input keyevent 26") }
+    }
+    val printedReason = if (safeReason.isEmpty()) "" else " $safeReason"
+    val cmd = "/system/bin/svc power reboot$printedReason" +
+        " || /system/bin/reboot$printedReason" +
+        " || /system/bin/setprop sys.powerctl reboot"
+    val ok = runCatching { ShellUtils.fastCmdResult(shell, cmd) }.getOrDefault(false)
+    Log.i(TAG, "reboot(reason='$safeReason') verified-shell result=$ok")
+    if (ok) return true
+    runCatching { shell.close() }
+    return false
+}
+
+private fun toastRebootFailed() {
+    runCatching {
+        Handler(Looper.getMainLooper()).post {
+            runCatching {
+                Toast.makeText(ksuApp, R.string.settings_reboot_failed, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 }
 
 fun rootAvailable(): Boolean {
@@ -1211,6 +1248,6 @@ fun applyTeeEngineSwitch(enabled: Boolean): Boolean = runCatching {
 }.getOrDefault(false)
 
 /** 开关只在开机路径上读，改完必须重启才生效。 */
-fun rebootDevice(): Boolean = runCatching {
-    getRootShell().newJob().add("reboot").exec().isSuccess
-}.getOrDefault(false)
+suspend fun rebootDevice(reason: String = ""): Boolean = withContext(Dispatchers.IO) {
+    rebootVerified(reason)
+}

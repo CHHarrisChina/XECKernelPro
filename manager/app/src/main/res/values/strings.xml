@@ -394,6 +394,7 @@ XEC Project Team
     <string name="settings_tee_engine">Built-in TEE/TS engine</string>
     <string name="settings_tee_engine_summary">Emulates the key attestation chain in keystore2. Turning it off only drops the emulation - root, modules and hiding keep working. The device reboots immediately and the engine is not injected on the next boot.</string>
     <string name="settings_tee_engine_failed">Could not change the built-in TEE/TS engine switch</string>
+    <string name="settings_tee_engine_started">TEE engine started</string>
     <string name="settings_susfs">Built-in SUSFS</string>
     <string name="settings_susfs_summary">Controls built-in SUSFS rules and bundled module loading. Changes immediately reboot the device. This does not remove SUSFS code compiled into the kernel or control third-party modules.</string>
     <string name="settings_reboot_failed">Setting saved, but automatic reboot failed. Restart the device to apply it.</string>
@@ -1165,6 +1166,10 @@ See the log below for details.</string>
     <string name="home_hero_running">Kernel running</string>
     <string name="home_hero_mount">Running in mount mode</string>
     <string name="home_hero_inactive">Kernel not running</string>
+    <string name="home_hero_jailbreak_status">JAILBREAK NEEDED</string>
+    <string name="home_hero_jailbreak_title">Waiting for jailbreak</string>
+    <string name="home_hero_jailbreak_subtitle">The kernel module is not loaded after this boot. Tap here to jailbreak again, or enable automatic jailbreak in Settings.</string>
+    <string name="jailbreak_resume_started">Starting jailbreak…</string>
     <string name="home_hero_mount_mode">Magisk mount mode</string>
     <string name="home_hero_kernel_mode">Kernel mode</string>
     <string name="home_update_tap_hint">Tap to view the changelog</string>

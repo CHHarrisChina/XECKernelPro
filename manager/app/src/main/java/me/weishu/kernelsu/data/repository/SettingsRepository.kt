@@ -51,6 +51,17 @@ interface SettingsRepository {
     var superuserSortOption: Int
     var suLogFilters: Set<String>?
     var autoJailbreak: Boolean
+
+    /**
+     * 这台设备**曾经**在越狱（late-load）形态下跑过。
+     *
+     * 开机时内核模块还没被注入，`Natives.isLateLoadMode` 只反映"现在有没有"，重启后
+     * 一定是 false —— 首页会把一台越狱设备显示成"未安装内核"，用户以为装坏了。
+     * 用这个一次性标记把"这台机器本来就是越狱形态"记住，首页才能给出"重新越狱"
+     * 的准确状态与入口，而不是叫你重刷。
+     */
+    var lateLoadSeen: Boolean
+
     var useSoftReboot: Boolean
     val intentToken: String
 
