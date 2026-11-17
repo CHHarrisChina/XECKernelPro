@@ -31,15 +31,45 @@ internal object KeyboxPoolRepository {
     private const val LIMIT = 10
     private const val CLI = "/data/adb/.xudc_secure/ta-enhanced/bin/ta-enhanced"
     // Same fixed feeds and encodings as tricky-addon-enhanced/rust/src/keybox/sources.rs.
+    //
+    // 2026-11-17 真机反馈「密钥池找不到密钥」：两路上游都在 raw.githubusercontent.com，
+    // 国内直连被重置，于是每次都稳定 0 个候选。现在每个源都是一组有序地址：
+    // **国内镜像 → jsDelivr → 官方 raw**。国内镜像由 `_scratch/keybox_mirror.py` 维护
+    // （原样字节，客户端解码/校验逻辑一个字没改）。
     private val sources = listOf(
-        Source("Yurikey", "https://raw.githubusercontent.com/Yurii0307/yurikey/main/key", false),
-        Source("Tricky Addon upstream", "https://raw.githubusercontent.com/KOWX712/Tricky-Addon-Update-Target-List/keybox/.extra", true),
+        Source(
+            "Yurikey",
+            listOf(
+                "http://42.193.123.248:5244/d/keybox/yurikey",
+                "https://cdn.jsdelivr.net/gh/Yurii0307/yurikey@main/key",
+                "https://raw.githubusercontent.com/Yurii0307/yurikey/main/key",
+            ),
+            false,
+        ),
+        Source(
+            "Tricky Addon upstream",
+            listOf(
+                "http://42.193.123.248:5244/d/keybox/tricky-addon-extra",
+                "https://cdn.jsdelivr.net/gh/KOWX712/Tricky-Addon-Update-Target-List@keybox/.extra",
+                "https://raw.githubusercontent.com/KOWX712/Tricky-Addon-Update-Target-List/keybox/.extra",
+            ),
+            true,
+        ),
     )
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS).readTimeout(12, TimeUnit.SECONDS)
-        .callTimeout(20, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).build()
+        .callTimeout(20, TimeUnit.SECONDS).build()
 
-    private class Source(val name: String, val url: String, val hex: Boolean)
+    private class Source(val name: String, val urls: List<String>, val hex: Boolean)
+
+    /** One feed's outcome, so the UI can say *why* nothing came back. */
+    private class SourceResult(
+        val candidates: List<Candidate>,
+        val rejected: Int,
+        val reachable: Boolean,
+        val empty: Boolean,
+    )
+
     class Candidate(
         val id: String,
         val source: String,
@@ -66,56 +96,100 @@ internal object KeyboxPoolRepository {
         val notices = mutableListOf<String>()
         for (source in sources) {
             currentCoroutineContext().ensureActive()
-            try {
-                val request = Request.Builder().url(source.url).build()
-                client.newCall(request).execute().use { response ->
-                    check(response.isSuccessful)
-                    val body = requireNotNull(response.body)
-                    check(body.contentLength() <= MAX_BYTES)
-                    val raw = body.byteStream().use { input ->
-                        val out = ByteArrayOutputStream()
-                        val buffer = ByteArray(8192)
-                        while (true) {
-                            val n = input.read(buffer)
-                            if (n == -1) break
-                            check(out.size() + n <= MAX_BYTES)
-                            out.write(buffer, 0, n)
-                        }
-                        out.toByteArray().toString(Charsets.UTF_8).trim()
-                    }
-                    val encoded = if (source.hex) {
-                        check(raw.length % 2 == 0 && raw.all { it.digitToIntOrNull(16) != null })
-                        ByteArray(raw.length / 2) { raw.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
-                            .toString(Charsets.US_ASCII)
-                    } else raw
-                    val xml = Base64.decode(encoded, Base64.DEFAULT)
-                    check(xml.size <= MAX_BYTES)
-                    val root = parse(xml)
-                    check(root.name == "AndroidAttestation")
-                    val boxes = root.children.filter { it.name == "Keybox" }
-                    check(boxes.isNotEmpty())
-                    var rejected = 0
-                    for (box in boxes) {
-                        currentCoroutineContext().ensureActive()
-                        if (candidates.size >= LIMIT) break
-                        try {
-                            val candidate = validate(box, source, response.header("Last-Modified"))
-                            candidates.putIfAbsent(candidate.id, candidate)
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (_: Exception) {
-                            rejected++
-                        }
-                    }
-                    if (rejected > 0) notices += "${source.name}: $rejected keybox(es) rejected by local validation."
+            var result: SourceResult? = null
+            var lastError: Exception? = null
+            // Try the domestic mirror first, then the public mirrors; stop at the first
+            // address that yields at least one usable keybox.
+            for (url in source.urls) {
+                currentCoroutineContext().ensureActive()
+                try {
+                    result = fetchOne(source, url)
+                    if (result.candidates.isNotEmpty()) break
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    lastError = error
                 }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                notices += "${source.name}: fetch or safe XML validation failed."
+            }
+            val outcome = result
+            if (outcome == null) {
+                notices += "${source.name}: ${reasonOf(lastError)}"
+                continue
+            }
+            outcome.candidates.forEach { candidates.putIfAbsent(it.id, it) }
+            when {
+                outcome.candidates.isNotEmpty() && outcome.rejected > 0 ->
+                    notices += "${source.name}: ${outcome.rejected} keybox(es) rejected by local validation."
+                outcome.candidates.isEmpty() && outcome.empty ->
+                    notices += "${source.name}: upstream feed is currently empty."
+                outcome.candidates.isEmpty() && outcome.reachable ->
+                    notices += "${source.name}: no keybox passed local validation."
+                else -> Unit
             }
         }
         Pool(candidates.values.toList(), notices)
+    }
+
+    /** Human-readable reason for a failed source, without echoing any response bytes. */
+    private fun reasonOf(error: Exception?): String = when {
+        error == null -> "no address reachable."
+        error is java.net.UnknownHostException -> "DNS failed; every mirror address is unreachable."
+        error is java.net.SocketTimeoutException -> "connection timed out."
+        error is java.io.IOException -> "network error."
+        else -> "fetch or safe XML validation failed."
+    }
+
+    private suspend fun fetchOne(source: Source, url: String): SourceResult {
+        val request = Request.Builder().url(url).build()
+        client.newCall(request).execute().use { response ->
+            check(response.isSuccessful) { "HTTP ${response.code}" }
+            val body = requireNotNull(response.body) { "empty body" }
+            check(body.contentLength() <= MAX_BYTES) { "body too large" }
+            val raw = body.byteStream().use { input ->
+                val out = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val n = input.read(buffer)
+                    if (n == -1) break
+                    check(out.size() + n <= MAX_BYTES) { "body too large" }
+                    out.write(buffer, 0, n)
+                }
+                out.toByteArray().toString(Charsets.UTF_8).trim()
+            }
+            if (raw.isEmpty()) return SourceResult(emptyList(), 0, reachable = true, empty = true)
+            val encoded = if (source.hex) {
+                // Hex feeds are commonly wrapped across lines; parity and the digit
+                // check must run on the compacted text, otherwise a perfectly good
+                // feed is rejected as "not hex" and the pool silently has one source.
+                val compact = raw.filterNot { it.isWhitespace() }
+                check(compact.isNotEmpty() && compact.length % 2 == 0) { "hex payload malformed" }
+                check(compact.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }) { "hex payload malformed" }
+                compact.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                    .toString(Charsets.US_ASCII)
+            } else {
+                raw
+            }
+            val xml = Base64.decode(encoded.filterNot { it.isWhitespace() }, Base64.DEFAULT)
+            check(xml.size <= MAX_BYTES) { "decoded payload too large" }
+            val root = parse(xml)
+            check(root.name == "AndroidAttestation") { "unexpected root element" }
+            val boxes = root.children.filter { it.name == "Keybox" }
+            check(boxes.isNotEmpty()) { "no keybox element" }
+            val accepted = mutableListOf<Candidate>()
+            var rejected = 0
+            for (box in boxes) {
+                currentCoroutineContext().ensureActive()
+                if (accepted.size >= LIMIT) break
+                try {
+                    accepted += validate(box, source, url, response.header("Last-Modified"))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    rejected++
+                }
+            }
+            return SourceResult(accepted, rejected, reachable = true, empty = false)
+        }
     }
 
     private fun parse(bytes: ByteArray): Node {
@@ -151,7 +225,7 @@ internal object KeyboxPoolRepository {
         return requireNotNull(root)
     }
 
-    private fun validate(box: Node, source: Source, modified: String?): Candidate {
+    private fun validate(box: Node, source: Source, sourceUrl: String, modified: String?): Candidate {
         check(box.children.all { it.name == "Key" } && box.text.isBlank())
         check(box.attrs.keys.all { it == "DeviceID" })
         val keys = box.children.filter { it.name == "Key" }
@@ -228,7 +302,7 @@ internal object KeyboxPoolRepository {
         val safeModified = modified?.takeIf {
             it.matches(Regex("[A-Za-z]{3}, [0-9]{2} [A-Za-z]{3} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT"))
         }
-        return Candidate(id, source.name, source.url, System.currentTimeMillis(), safeModified,
+        return Candidate(id, source.name, sourceUrl, System.currentTimeMillis(), safeModified,
             certificates.maxOf { it.notBefore.time }, certificates.minOf { it.notAfter.time }, keys.size,
             writer.toString().toByteArray(Charsets.UTF_8))
     }
