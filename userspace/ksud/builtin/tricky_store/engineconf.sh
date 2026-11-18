@@ -409,6 +409,16 @@ _busybox_bin() {
     printf '%s\n' "$c"
 }
 
+# 本文件自带的短 sha：service.sh 里的 _kb_sha 只活在那个文件的作用域里，engineconf
+# 要能单独 source（离线单测），所以不依赖外部 helper。
+_engineconf_sha() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" 2>/dev/null | cut -c1-16
+    else
+        printf 'size-%s' "$(wc -c < "$1" 2>/dev/null | tr -d ' ')"
+    fi
+}
+
 # 当前 live 箱子的剩余天数；取不到打 -1。
 _keybox_days_left() {
     local _line
@@ -418,22 +428,44 @@ _keybox_days_left() {
 }
 
 refresh_keybox_if_stale() {
-    local live="$RUNTIME/keybox.xml" days stamp now ago raw xml bb ta
+    local live="$RUNTIME/keybox.xml" health ok days stamp now ago raw xml bb ta
+    local live_sha ship_sha own_sha
     [ -f "$live" ] || return 0
-    days=$(_keybox_days_left)
+
+    # 健康度一次取全：ok 决定"是不是坏了"，days 决定"是不是快过期"。
+    health=$(_keybox_health_line) || health=""
+    set -- $health
+    ok=${1:-0}
+    days=${2:--1}
     case "$days" in
         ''|*[!0-9-]*) days=-1 ;;
     esac
-    # 健康（>10 天）就什么都不做——这条路径默认零网络。
-    if [ "$days" -gt 10 ] 2>/dev/null; then
+    # 健康（ok=1 且 >10 天）就什么都不做——这条路径默认零网络。
+    if [ "$ok" = 1 ] && [ "$days" -gt 10 ] 2>/dev/null; then
         return 0
     fi
+
+    # 只接管"我们自己放进去的箱子"：内置副本，或上一次由本函数安装的副本。
+    # 用户通过管理器密钥池导入的箱子不覆盖——那是他自己的密钥身份，换掉会让他已绑定
+    # 的客户端密钥全部失效（OMY 的 retire_stale_keybox_bound_keys 默认开）。
+    # 例外：当前箱子已经验不过（ok=0，多半就是过期），换掉是帮忙不是破坏。
+    live_sha=$(_engineconf_sha "$live")
+    ship_sha=$(_engineconf_sha "$MODPATH/keybox.xml")
+    own_sha=$(cat "$RUNTIME/.keybox_feed.installed" 2>/dev/null)
+    [ -n "$own_sha" ] || own_sha="__none__"
+    if [ "$ok" = 1 ] && [ "$live_sha" != "$ship_sha" ] && [ "$live_sha" != "$own_sha" ]; then
+        log_line "INFO keybox feed: live keybox is not ours (sha=$live_sha); keeping the user's box"
+        return 0
+    fi
+
     stamp="$RUNTIME/.keybox_feed.stamp"
     now=$(date +%s 2>/dev/null || echo 0)
     ago=$(( now - $(cat "$stamp" 2>/dev/null || echo 0) ))
     [ "$ago" -ge 3600 ] || return 0
     printf '%s\n' "$now" > "$stamp" 2>/dev/null
-    command -v worker_lock >/dev/null 2>&1 && { worker_lock keybox-refresh || return 0; }
+    # 这里**不能**用 service.sh 的 worker_lock：它用 `exec 8>`，在 15s 对账循环里
+    # 会把循环自己持有的 sync 锁挤掉。刷新是低频幂等操作，靠 stamp 节流就够；
+    # 两个 worker 同时写也只会各自 mv 一份合法箱子。
 
     raw="$RUNTIME/.keybox_feed.raw"
     xml="$RUNTIME/.keybox_feed.xml"
@@ -483,8 +515,8 @@ refresh_keybox_if_stale() {
     cp -f "$live" "$RUNTIME/keybox.xml.bak" 2>/dev/null
     chmod 644 "$xml" 2>/dev/null
     if mv -f "$xml" "$live" 2>/dev/null; then
-        _kb_new_days=$(_keybox_days_left)
-        log_line "INFO keybox feed: installed fresh keybox (was days_left=$days, now days_left=$_kb_new_days, DeviceID=$(sed -n 's/.*DeviceID="\([^"]*\)".*/\1/p' "$live" 2>/dev/null | head -n 1))"
+        printf '%s\n' "$(_engineconf_sha "$live")" > "$RUNTIME/.keybox_feed.installed" 2>/dev/null
+        log_line "INFO keybox feed: installed fresh keybox (was ok=$ok days_left=$days, now days_left=$(_keybox_days_left), DeviceID=$(sed -n 's/.*DeviceID="\([^"]*\)".*/\1/p' "$live" 2>/dev/null | head -n 1))"
         rm -f "$raw"
         return 0
     fi
