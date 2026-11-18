@@ -63,6 +63,16 @@ open class KernelSUApplication : Application(), ViewModelStoreOwner {
             return
         }
 
+        // 2026-11-18 磁吸磁贴板已下线：删掉它写进 settings 的布局/颜色记忆，
+        // 界面恢复成原先的卡片首页，不再"记得"任何磁吸状态。
+        runCatching {
+            getSharedPreferences("settings", android.content.Context.MODE_PRIVATE).edit()
+                .remove("home_layout_tiles")
+                .remove("home_tile_layout_v2")
+                .remove("home_tile_roles")
+                .apply()
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             val enable = SettingsRepositoryImpl().enablePredictiveBack
             HiddenApiBypass.addHiddenApiExemptions("Landroid/content/pm/ApplicationInfo;->setEnableOnBackInvokedCallback")

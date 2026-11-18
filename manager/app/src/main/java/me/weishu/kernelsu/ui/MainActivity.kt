@@ -105,7 +105,6 @@ import me.weishu.kernelsu.ui.screen.flash.FlashScreen
 import me.weishu.kernelsu.ui.screen.detect.DetectPager
 import me.weishu.kernelsu.ui.screen.home.HomePager
 import me.weishu.kernelsu.ui.screen.remote.RemoteAssistantScreen
-import me.weishu.kernelsu.ui.screen.hometiles.HomeTilesEditorScreen
 import me.weishu.kernelsu.ui.screen.susfs.SusfsScreen
 import me.weishu.kernelsu.ui.screen.tools.ToolsScreen
 import me.weishu.kernelsu.ui.screen.theme.ThemeScreen
@@ -459,7 +458,6 @@ open class MainActivity : ComponentActivity() {
                                             entry<Route.RemoteAssistant> { RemoteAssistantScreen() }
                                             entry<Route.Tools> { ToolsScreen() }
                                             entry<Route.Susfs> { SusfsScreen() }
-                                            entry<Route.HomeTiles> { HomeTilesEditorScreen() }
                                             entry<Route.Privilege> { key -> PrivilegeScreen(key.updateMode) }
                                             entry<Route.Home> { mainScreenEntry() }
                                             entry<Route.SuperUser> { mainScreenEntry() }

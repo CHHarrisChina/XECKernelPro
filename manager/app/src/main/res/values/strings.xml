@@ -747,6 +747,7 @@ See the log below for details.</string>
     <string name="themes_publish_picker_title">Pick a theme to publish</string>
     <string name="themes_publish_picker_hint">The package is uploaded to the XEC drive and the store bot collects it within ~10 minutes. No GitHub account needed.</string>
     <string name="themes_publish_picker_empty">Nothing to publish yet. Create a theme in the editor, or import one with .xectheme.</string>
+    <string name="themes_publish_picker_go_editor">Create one in the editor</string>
     <string name="themes_publish_pending">Submitted to the XEC server. It is reviewed and listed in the store; refresh later. No GitHub account is needed.</string>
     <string name="themes_copy_link">Copy link</string>
     <string name="themes_open_form">Open the GitHub form (optional)</string>

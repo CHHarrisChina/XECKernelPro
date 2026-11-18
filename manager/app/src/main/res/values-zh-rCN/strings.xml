@@ -749,6 +749,7 @@ XEC 项目组
     <string name="themes_publish_picker_title">选择要发布的主题</string>
     <string name="themes_publish_picker_hint">包会传到 XEC 网盘，主题仓库的机器人 10 分钟内自动收录，不需要 GitHub 账号。</string>
     <string name="themes_publish_picker_empty">还没有可发布的主题。先去「编辑器」做一个，或用 .xectheme 导入一个。</string>
+    <string name="themes_publish_picker_go_editor">去「编辑器」自己做一个</string>
     <string name="themes_publish_pending">已上传到 XEC 服务器。审核后自动出现在主题商城，稍后刷新即可；不需要 GitHub 账号。</string>
     <string name="themes_copy_link">复制直链</string>
     <string name="themes_open_form">去 GitHub 开 issue（可选）</string>

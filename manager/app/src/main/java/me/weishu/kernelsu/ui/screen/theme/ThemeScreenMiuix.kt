@@ -196,6 +196,16 @@ fun ThemeScreenMiuix(
                 color = Xc.colors.textSecondary,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
             )
+            // 空状态别只让用户"自己去想"：直接送到编辑器页签，做一个出来再回来发布。
+            TextButton(
+                text = stringResource(R.string.themes_publish_picker_go_editor),
+                onClick = {
+                    onDismissPublishPicker()
+                    actions.onSelectTab(2)
+                },
+                modifier = Modifier.padding(horizontal = 12.dp),
+                colors = ButtonDefaults.textButtonColorsPrimary(),
+            )
         } else {
             Column(
                 modifier = Modifier

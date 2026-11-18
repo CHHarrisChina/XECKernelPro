@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.runtime.Composable
@@ -58,7 +57,6 @@ import me.weishu.kernelsu.ui.design.panel.Xc8Row
 import me.weishu.kernelsu.ui.design.panel.Xc8SectionLabel
 import me.weishu.kernelsu.ui.design.panel.Xc8Switch
 import me.weishu.kernelsu.ui.navigation3.LocalNavigator
-import me.weishu.kernelsu.ui.navigation3.Route
 import me.weishu.kernelsu.ui.screen.settings.PifSection
 import me.weishu.kernelsu.ui.viewmodel.HomeViewModel
 import me.weishu.kernelsu.ui.webui.OmyWebUIActivity
@@ -179,13 +177,6 @@ fun ToolsScreen() {
                         modifier = Modifier.padding(top = 22.dp),
                     )
                     Xc8Panel {
-                        Xc8Row(
-                            title = "磁贴开始屏幕（布局编辑器）",
-                            subtitle = "网格参考线、拖动磁吸、手柄缩放、增删磁贴与换色",
-                            leading = Icons.Rounded.Extension,
-                            onClick = { navigator.push(Route.HomeTiles) },
-                            trailing = { Xc8Chevron() },
-                        )
                         Xc8Row(
                             title = "收集密钥池",
                             subtitle = "获取上游密钥、查看时间并选择应用",
