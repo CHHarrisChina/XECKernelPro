@@ -14,6 +14,7 @@ import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.ipc.RootService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.IKsuInterface
 import me.weishu.kernelsu.Natives
@@ -29,13 +30,18 @@ class SuperUserRepositoryImpl : SuperUserRepository {
 
     companion object {
         private const val TAG = "SuperUserRepository"
+
+        /** KsuService 绑定/回调的硬超时；超过它就不再等，按失败处理。 */
+        private const val CONNECT_TIMEOUT_MS = 8_000L
     }
 
     override suspend fun getAppList(): Result<Pair<List<AppInfo>, List<Int>>> = withContext(Dispatchers.IO) {
         runCatching {
-            val result = connectKsuService {
-                Log.w(TAG, "KsuService disconnected")
-            }
+            // 绑定/回调如果永远不来，超级用户页会一直转圈；给一个硬超时，失败就走
+            // runCatching 的正常失败路径（页面显示错误而不是无限等待）。
+            val result = withTimeoutOrNull(CONNECT_TIMEOUT_MS) {
+                connectKsuService { Log.w(TAG, "KsuService disconnected") }
+            } ?: throw IllegalStateException("KsuService bind timeout")
 
             var currentBinder = result.first
             var currentConnection = result.second
@@ -45,7 +51,9 @@ class SuperUserRepositoryImpl : SuperUserRepository {
                     withContext(Dispatchers.Main) {
                         RootService.unbind(currentConnection)
                     }
-                    val retry = connectKsuService { Log.w(TAG, "KsuService disconnected") }
+                    val retry = withTimeoutOrNull(CONNECT_TIMEOUT_MS) {
+                        connectKsuService { Log.w(TAG, "KsuService disconnected") }
+                    } ?: throw IllegalStateException("KsuService rebind timeout")
                     currentBinder = retry.first
                     currentConnection = retry.second
                     return IKsuInterface.Stub.asInterface(currentBinder)
@@ -160,7 +168,18 @@ class SuperUserRepositoryImpl : SuperUserRepository {
                 Shell.EXECUTOR,
                 connection,
             )
-            task?.let { shell.execTask(it) }
+            // 2026-11-18 bugreport（data_app_anr）根因：`shell.execTask(task)` 是**同步等待**
+            // （R8 后的主线程栈就是 ShellImpl.execTask → SyncTask.await → LockSupport.park），
+            // 而这段代码跑在 `withContext(Dispatchers.Main)` 里。真机上从冷启动等 root shell
+            // + 拉起 KsuService 任务超过 5s，主线程直接被判 ANR（连续两份 ANR 都是这个栈），
+            // 表现就是打开管理器后界面卡死/被系统杀掉。
+            //
+            // 修法：bind 注册留在主线程（它只是一次 bindService，很轻），**阻塞的任务执行**
+            // 交给 libsu 自己的执行器；主线程只挂在这条 suspendCancellableCoroutine 上
+            // 等 onServiceConnected 回调，不再持锁等待 shell 任务完成。
+            if (task != null) {
+                Shell.EXECUTOR.execute { shell.execTask(task) }
+            }
         }
     }
 }

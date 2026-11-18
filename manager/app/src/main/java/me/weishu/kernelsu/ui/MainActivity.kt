@@ -192,7 +192,12 @@ open class MainActivity : ComponentActivity() {
         }
 
         val isManager = Natives.isManager
-        if (isManager && Natives.kernelUAPIVersion == Natives.managerUAPIVersion) install()
+        // 2026-11-18 bugreport 的 ANR 根因之一：install() 会创建/探测 root shell 并同步
+        // exec `xudc install`，全是阻塞调用；放在 onCreate 主线程上，冷启动一旦等 shell
+        // （su 授权/驱动就绪慢）就超过 5s 判 ANR。这里挪到后台线程，首帧不再等它。
+        if (isManager && Natives.kernelUAPIVersion == Natives.managerUAPIVersion) {
+            Thread { runCatching { install() } }.start()
+        }
 
         if (savedInstanceState == null) intent?.let { intentChannel.trySend(it) }
 
