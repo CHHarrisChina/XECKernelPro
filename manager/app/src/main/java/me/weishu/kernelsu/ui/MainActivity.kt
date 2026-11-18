@@ -102,6 +102,7 @@ import me.weishu.kernelsu.ui.screen.appprofile.AppProfileScreen
 import me.weishu.kernelsu.ui.screen.colorpalette.ColorPaletteScreen
 import me.weishu.kernelsu.ui.screen.executemoduleaction.ExecuteModuleActionScreen
 import me.weishu.kernelsu.ui.screen.flash.FlashScreen
+import me.weishu.kernelsu.ui.screen.hmaoss.HmaOssScreen
 import me.weishu.kernelsu.ui.screen.detect.DetectPager
 import me.weishu.kernelsu.ui.screen.home.HomePager
 import me.weishu.kernelsu.ui.screen.remote.RemoteAssistantScreen
@@ -462,6 +463,7 @@ open class MainActivity : ComponentActivity() {
                                             entry<Route.ExecuteModuleAction> { key -> ExecuteModuleActionScreen(key.moduleId, key.fromShortcut) }
                                             entry<Route.RemoteAssistant> { RemoteAssistantScreen() }
                                             entry<Route.Tools> { ToolsScreen() }
+                                            entry<Route.HmaOss> { HmaOssScreen() }
                                             entry<Route.Susfs> { SusfsScreen() }
                                             entry<Route.Privilege> { key -> PrivilegeScreen(key.updateMode) }
                                             entry<Route.Home> { mainScreenEntry() }

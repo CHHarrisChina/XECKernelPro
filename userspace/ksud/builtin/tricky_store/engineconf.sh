@@ -575,3 +575,51 @@ scan_env_residue() {
     done
     log_line "INFO residue: /data/local/tmp $(stat -c '%a %u:%g' /data/local/tmp 2>/dev/null), checked=$found; prop pihook/pixelprops/spoof.gms=$(getprop 2>/dev/null | grep -cE 'pihook|pixelprops|spoof.gms'), chunqiu.path_hide=$(getprop persist.chunqiu.path_hide 2>/dev/null), vold_isolation=$(getprop persist.sys.vold_app_data_isolation_enabled 2>/dev/null)"
 }
+
+# ---------------------------------------------------------------------------
+# 启动态三方一致性取证（Maple 六：「8项设备属性双源核对 / 启动参数原始值交叉验证」）
+#
+# 属性区与 /proc/cmdline 是两条独立读取路径：属性说 locked/green、cmdline 还带
+# androidboot.verifiedbootstate=orange 就是典型的三方矛盾，检测器把它当成"属性被改过"。
+# ksud 的 bootstate 会对 cmdline/bootconfig 做 overlay；这里只做**校验与取证**，
+# 不一致时打 WARN 并留下两侧原值，不在这里改（改错会连启动都受影响）。
+log_boot_consistency() {
+    local prop_vbs prop_locked prop_dev prop_verity cmd_vbs cmd_locked cmd_dev
+    prop_vbs=$(getprop ro.boot.verifiedbootstate 2>/dev/null)
+    prop_locked=$(getprop ro.boot.flash.locked 2>/dev/null)
+    prop_dev=$(getprop ro.boot.vbmeta.device_state 2>/dev/null)
+    prop_verity=$(getprop ro.boot.veritymode 2>/dev/null)
+    cmd_vbs=$(tr ' ' '\n' < /proc/cmdline 2>/dev/null | sed -n 's/^androidboot\.verifiedbootstate=//p' | head -n 1)
+    cmd_locked=$(tr ' ' '\n' < /proc/cmdline 2>/dev/null | sed -n 's/^androidboot\.flash\.locked=//p' | head -n 1)
+    cmd_dev=$(tr ' ' '\n' < /proc/cmdline 2>/dev/null | sed -n 's/^androidboot\.vbmeta\.device_state=//p' | head -n 1)
+    log_line "INFO bootconsistency: prop[vbs=${prop_vbs:-none} locked=${prop_locked:-none} device_state=${prop_dev:-none} verity=${prop_verity:-none}] cmdline[vbs=${cmd_vbs:-absent} locked=${cmd_locked:-absent} device_state=${cmd_dev:-absent}]"
+    case "$cmd_vbs" in
+        ''|green) : ;;
+        *) log_line "WARN bootconsistency: /proc/cmdline 仍为 verifiedbootstate=$cmd_vbs（属性侧是 ${prop_vbs:-none}）——属性与启动参数矛盾，检查 cmdline/bootconfig overlay 是否生效（SUSFS/ksud bootstate）" ;;
+    esac
+    case "$cmd_locked" in
+        ''|1) : ;;
+        *) log_line "WARN bootconsistency: /proc/cmdline 仍为 flash.locked=$cmd_locked（属性侧是 ${prop_locked:-none}）" ;;
+    esac
+    case "$cmd_dev" in
+        ''|locked) : ;;
+        *) log_line "WARN bootconsistency: /proc/cmdline 仍为 vbmeta.device_state=$cmd_dev（属性侧是 ${prop_dev:-none}）" ;;
+    esac
+}
+
+# 清理我们自己的瞬时残留（不动用户文件）：feed 临时文件、半截 tmp。
+cleanup_stale_artifacts() {
+    local f
+    for f in "$RUNTIME/.keybox_feed.raw" "$RUNTIME/.keybox_feed.xml"; do
+        if [ -f "$f" ]; then
+            rm -f "$f" 2>/dev/null && log_line "INFO cleanup: removed stale $(basename "$f")"
+        fi
+    done
+    # 半截 tmp 超过 1 天才算残留（避免删掉另一个 worker 正在写的文件）
+    for f in "$RUNTIME"/*.tmp.* "$RUNTIME"/.engine.*.tmp; do
+        [ -e "$f" ] || continue
+        [ -n "$(find "$f" -maxdepth 0 -mtime +1 2>/dev/null)" ] && {
+            rm -rf "$f" 2>/dev/null && log_line "INFO cleanup: removed stale $(basename "$f")"
+        }
+    done
+}

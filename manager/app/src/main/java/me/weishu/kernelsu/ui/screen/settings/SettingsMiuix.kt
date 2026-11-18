@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.automirrored.rounded.Rule
 import androidx.compose.material.icons.rounded.Adb
 import androidx.compose.material.icons.rounded.AdminPanelSettings
+import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
@@ -546,6 +547,13 @@ fun SettingPagerMiuix(
                             subtitle = stringResource(id = R.string.tools_summary),
                             leading = Icons.Rounded.Handyman,
                             onClick = actions.onOpenTools,
+                            trailing = { Xc8Chevron() },
+                        )
+                        Xc8Row(
+                            title = stringResource(R.string.hma_oss_title),
+                            subtitle = stringResource(R.string.hma_oss_summary),
+                            leading = Icons.Rounded.Apps,
+                            onClick = actions.onOpenHmaOss,
                             trailing = { Xc8Chevron() },
                         )
                         Xc8Row(

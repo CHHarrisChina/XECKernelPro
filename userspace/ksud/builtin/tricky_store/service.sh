@@ -441,6 +441,8 @@ capture_engine_state() {
     refresh_keybox_if_stale && mirror_keybox
     log_attest_trust_state
     scan_env_residue
+    log_boot_consistency
+    cleanup_stale_artifacts
     log_target_coverage
 }
 

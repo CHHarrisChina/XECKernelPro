@@ -118,6 +118,10 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object Tools : Route
 
+    @Parcelize
+    @Serializable
+    data object HmaOss : Route
+
     /** SUSFS 管理：与 SukiSU Nova 同款的内核级隐藏/伪装开关页（从设置页进入）。 */
     @Parcelize
     @Serializable
