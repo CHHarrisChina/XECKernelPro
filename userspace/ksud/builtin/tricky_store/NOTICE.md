@@ -37,7 +37,8 @@
 
 - `service.sh` — 引擎载体：落盘、keybox 真源与镜像、作用域导出、启停与看护
 - `post-fs-data.sh` — 开机前准备 `/data/misc/keystore/omk` 与 keybox
-- `engineconf.sh` — target.txt 合并/对账/检测工具路由/`sync_scoop`
+- `engineconf.sh` — target.txt 合并/对账/检测工具路由/`sync_scoop`/keybox 自愈
+- `diag.sh` — 只读诊断收集（TEE 路由、箱子健康度、作用域、注入状态、属性对照）
 - `target_autofill.sh`、`target.baseline.txt`、`target.txt`
 - `sepolicy.rule` — 本项目规则 + 上游规则并集
 - `keybox.xml` — 数据文件（第三方公开箱子，非本项目的代码作品）

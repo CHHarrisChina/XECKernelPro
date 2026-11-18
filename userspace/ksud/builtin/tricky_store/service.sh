@@ -440,6 +440,7 @@ capture_engine_state() {
     sync_scoop
     refresh_keybox_if_stale && mirror_keybox
     log_attest_trust_state
+    scan_env_residue
     log_target_coverage
 }
 

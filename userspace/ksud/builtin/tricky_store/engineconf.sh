@@ -397,7 +397,9 @@ sync_scoop() {
 #
 # 只换单箱文件：OMY 的解析器按 TS 语义只认一个 <Keybox>（RSA+EC 两个 Key entry），
 # 不能把"多箱子合并文档"（/d/keybox/xec）喂给引擎——那是给管理器密钥池用的。
-XEC_KEYBOX_FEED=${XEC_KEYBOX_FEED:-http://42.193.123.248:5244/d/keybox/yurikey}
+# 候选源按顺序试：engine（服务端挑好的单箱最新）→ yurikey（上游单箱镜像）。
+# 两者都是自家域名，客户端不访问 GitHub 上游。
+XEC_KEYBOX_FEEDS=${XEC_KEYBOX_FEEDS:-${XEC_KEYBOX_FEED:-"http://42.193.123.248:5244/d/keybox/engine http://42.193.123.248:5244/d/keybox/yurikey"}}
 
 _busybox_bin() {
     local c
@@ -469,28 +471,32 @@ refresh_keybox_if_stale() {
 
     raw="$RUNTIME/.keybox_feed.raw"
     xml="$RUNTIME/.keybox_feed.xml"
-    rm -f "$raw" "$xml"
     bb=$(_busybox_bin)
-    if [ -n "$bb" ]; then
-        "$bb" wget -q -T 20 -O "$raw" "$XEC_KEYBOX_FEED" 2>/dev/null || rm -f "$raw"
-    fi
-    if [ ! -s "$raw" ] && command -v curl >/dev/null 2>&1; then
-        curl -fsSL --max-time 20 -o "$raw" "$XEC_KEYBOX_FEED" 2>/dev/null || rm -f "$raw"
-    fi
-    if [ ! -s "$raw" ]; then
-        log_line "WARN keybox feed: fetch failed (days_left=$days); keeping the live copy"
-        return 1
-    fi
-    if grep -q '<AndroidAttestation' "$raw" 2>/dev/null; then
-        cp -f "$raw" "$xml" 2>/dev/null
-    else
-        [ -n "$bb" ] && "$bb" base64 -d "$raw" > "$xml" 2>/dev/null
-        if [ ! -s "$xml" ] && command -v base64 >/dev/null 2>&1; then
-            base64 -d "$raw" > "$xml" 2>/dev/null
+    got=0
+    for _url in $XEC_KEYBOX_FEEDS; do
+        rm -f "$raw" "$xml"
+        if [ -n "$bb" ]; then
+            "$bb" wget -q -T 20 -O "$raw" "$_url" 2>/dev/null || rm -f "$raw"
         fi
-    fi
-    if ! grep -q '<AndroidAttestation' "$xml" 2>/dev/null; then
-        log_line "WARN keybox feed: payload is not an AndroidAttestation document; ignored"
+        if [ ! -s "$raw" ] && command -v curl >/dev/null 2>&1; then
+            curl -fsSL --max-time 20 -o "$raw" "$_url" 2>/dev/null || rm -f "$raw"
+        fi
+        [ -s "$raw" ] || continue
+        if grep -q '<AndroidAttestation' "$raw" 2>/dev/null; then
+            cp -f "$raw" "$xml" 2>/dev/null
+        else
+            [ -n "$bb" ] && "$bb" base64 -d "$raw" > "$xml" 2>/dev/null
+            if [ ! -s "$xml" ] && command -v base64 >/dev/null 2>&1; then
+                base64 -d "$raw" > "$xml" 2>/dev/null
+            fi
+        fi
+        if grep -q '<AndroidAttestation' "$xml" 2>/dev/null; then
+            got=1
+            break
+        fi
+    done
+    if [ "$got" != 1 ]; then
+        log_line "WARN keybox feed: fetch failed from [${XEC_KEYBOX_FEEDS}] (days_left=$days); keeping the live copy"
         rm -f "$raw" "$xml"
         return 1
     fi
@@ -501,13 +507,26 @@ refresh_keybox_if_stale() {
     fi
     ta=$(_ta_enhanced_bin)
     if [ -n "$ta" ]; then
+        local _vj _vdays _vroot
         if command -v timeout >/dev/null 2>&1; then
-            timeout 30 "$ta" keybox validate "$xml" >/dev/null 2>&1 || ta=
+            _vj=$(timeout 30 "$ta" keybox validate "$xml" 2>/dev/null)
         else
-            "$ta" keybox validate "$xml" >/dev/null 2>&1 || ta=
+            _vj=$("$ta" keybox validate "$xml" 2>/dev/null)
         fi
-        if [ -z "$ta" ]; then
-            log_line "WARN keybox feed: candidate failed ta-enhanced validation; keeping the live copy"
+        # 候选必须同时满足：链验证通过、根是 Google/Google-RKP、叶子剩余 >=1 天。
+        # 只发"能自证"的箱子：AOSP/测试根顶上去只会把"证书过期"换成"AOSP密钥/未知根证书"。
+        if ! printf '%s' "$_vj" | grep -qE '"root_type"[[:space:]]*:[[:space:]]*"google'; then
+            _vroot=$(printf '%s' "$_vj" | sed -n 's/.*"root_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+            log_line "WARN keybox feed: candidate root is '${_vroot:-unparsed}' (not Google); keeping the live copy"
+            rm -f "$raw" "$xml"
+            return 1
+        fi
+        _vdays=$(printf '%s' "$_vj" | sed -n 's/.*"leaf_days_left"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9]\{1,\}\).*/\1/p' | head -n 1)
+        case "$_vdays" in
+            ''|*[!0-9-]*) _vdays=-1 ;;
+        esac
+        if [ "$_vdays" -lt 1 ]; then
+            log_line "WARN keybox feed: candidate expires in ${_vdays}d (not usable); keeping the live copy"
             rm -f "$raw" "$xml"
             return 1
         fi
@@ -537,4 +556,22 @@ log_attest_trust_state() {
         | grep -E 'security_patch|os_patchlevel|vendor_patchlevel|boot_patchlevel|verified_boot_state|device_locked' \
         | tr '\n' ' ')
     log_line "INFO trust: prop[security_patch]=${sp:-none} prop[vendor_patch]=${vp:-none} prop[boot_patch]=${bp:-none} vbmeta_digest=$([ -n "$(getprop ro.boot.vbmeta.digest 2>/dev/null)" ] && echo set || echo missing) omk=${trust:-no-config}"
+}
+
+# ---------------------------------------------------------------------------
+# 只读环境取证（Maple 五/附录 B）：把"命中列表里会出现的路径"逐条记进 .engine.log。
+# 只记录、不删除：这些文件多数属于用户自己的工具/其他模块，产品无权替人清空；
+# 记录下来的具体路径就是下一轮排查的直接输入。
+scan_env_residue() {
+    local p found=0
+    for p in /data/local/tmp/mount_mask /data/local/tmp/mount_mark /data/local/tmp/resetprop \
+             /data/local/tmp/HyperCeiler /data/local/tmp/simpleHook /data/local/tmp/luckys \
+             /data/local/stryker /data/DNA /data/system/AppRetention /data/gpu_freq_table.conf \
+             /data/swap_config.conf /system/bin/adb /system/bin/fastboot /storage/emulated/0/MT2; do
+        if [ -e "$p" ]; then
+            log_line "INFO residue: exists $p"
+            found=$((found + 1))
+        fi
+    done
+    log_line "INFO residue: /data/local/tmp $(stat -c '%a %u:%g' /data/local/tmp 2>/dev/null), checked=$found; prop pihook/pixelprops/spoof.gms=$(getprop 2>/dev/null | grep -cE 'pihook|pixelprops|spoof.gms'), chunqiu.path_hide=$(getprop persist.chunqiu.path_hide 2>/dev/null), vold_isolation=$(getprop persist.sys.vold_app_data_isolation_enabled 2>/dev/null)"
 }
