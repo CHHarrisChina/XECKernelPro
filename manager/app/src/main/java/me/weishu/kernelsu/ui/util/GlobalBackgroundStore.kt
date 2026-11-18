@@ -49,6 +49,20 @@ class GlobalBackgroundStore private constructor(context: Context) {
         readability = preferences.getInt("readability", 65).coerceIn(0, 100),
     )
 
+    /**
+     * 当前自定义背景的原始字节（没有自定义图时返回 null）。
+     *
+     * 2026-11-18 用户要求：自定义背景也要能上传到自己的服务器。只读文件、不上传任何
+     * 元数据；调用方负责选择目标与提示结果。
+     */
+    fun currentImageBytes(): ByteArray? = runCatching {
+        val name = mutableSettings.value.image
+        if (name.isEmpty()) return null
+        val file = File(directory, name)
+        if (!file.isFile || file.length() <= 0L || file.length() > MAX_IMPORT_BYTES) return null
+        file.readBytes()
+    }.getOrNull()
+
     suspend fun importImage(uri: Uri) = withContext(Dispatchers.IO) {
         mutex.withLock {
             check(directory.isDirectory || directory.mkdirs()) { "Could not create background directory" }

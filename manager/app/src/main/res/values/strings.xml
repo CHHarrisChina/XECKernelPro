@@ -738,6 +738,7 @@ See the log below for details.</string>
     <string name="themes_import">Import package</string>
     <string name="themes_import_done">Imported: %1$s</string>
     <string name="themes_import_failed">Import failed: %1$s</string>
+    <string name="themes_link_copied">Link copied</string>
     <string name="themes_publish">Publish to the store</string>
     <string name="themes_publish_failed">Upload failed: %1$s</string>
     <string name="themes_publish_entry_title">Publish my theme</string>
@@ -745,7 +746,8 @@ See the log below for details.</string>
     <string name="themes_publish_picker_title">Pick a theme to publish</string>
     <string name="themes_publish_picker_hint">The package is uploaded to the XEC drive and the store bot collects it within ~10 minutes. No GitHub account needed.</string>
     <string name="themes_publish_picker_empty">Nothing to publish yet. Create a theme in the editor, or import one with .xectheme.</string>
-    <string name="themes_publish_pending">Submitted. The store bot collects it within ~10 minutes — refresh the store afterwards. The link below also works for the GitHub form.</string>
+    <string name="themes_publish_pending">Submitted to the XEC server. It is reviewed and listed in the store; refresh later. No GitHub account is needed.</string>
+    <string name="themes_copy_link">Copy link</string>
     <string name="themes_open_form">Open the GitHub form (optional)</string>
     <string name="theme_editor_title">Theme editor</string>
     <string name="theme_editor_new">New theme</string>

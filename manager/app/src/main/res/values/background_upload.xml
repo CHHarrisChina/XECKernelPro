@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="global_background_upload">Upload this background</string>
+    <string name="global_background_uploaded">Uploaded to the XEC server: %1$s</string>
+</resources>

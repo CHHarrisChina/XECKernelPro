@@ -1,6 +1,7 @@
 package me.weishu.kernelsu.ui.screen.theme
 
 import android.content.Context
+import android.widget.Toast
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -59,10 +60,6 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
-
-/** 主题仓库的提交表单：发布后打开它，把直链填进去。 */
-private const val SUBMIT_FORM_URL =
-    "https://github.com/byBOOK10086/XECKernelPro-Themes/issues/new?template=upload-theme.yml"
 
 /**
  * 主题屏的界面壳：顶栏 + 三个 Tab（商城 / 我的 / 编辑器）+ 发布成功后的对话框。
@@ -267,10 +264,15 @@ fun ThemeScreenMiuix(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             TextButton(
-                text = stringResource(R.string.themes_open_form),
+                // 2026-11-18：主题上传只走自家服务器，不再把用户引到 GitHub 表单。
+                text = stringResource(R.string.themes_copy_link),
                 onClick = {
-                    openUrl(context, SUBMIT_FORM_URL)
-                    onDismissPublish()
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                        as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(
+                        android.content.ClipData.newPlainText("xectheme", publishLink.orEmpty()),
+                    )
+                    Toast.makeText(context, R.string.themes_link_copied, Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.textButtonColorsPrimary(),
@@ -285,11 +287,3 @@ fun ThemeScreenMiuix(
     }
 }
 
-/** 打开外部链接（提交表单）：失败就静默——用户还能自己复制那条直链。 */
-internal fun openUrl(context: Context, url: String) {
-    runCatching {
-        context.startActivity(
-            Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-    }
-}

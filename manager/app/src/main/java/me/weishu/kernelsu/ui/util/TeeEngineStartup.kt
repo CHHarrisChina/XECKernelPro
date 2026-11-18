@@ -1,10 +1,7 @@
 package me.weishu.kernelsu.ui.util
 
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
-import android.widget.Toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -16,8 +13,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.Natives
-import me.weishu.kernelsu.R
-import me.weishu.kernelsu.ksuApp
 import me.weishu.kernelsu.ui.screen.settings.TeeDiagnostics
 
 /**
@@ -31,8 +26,9 @@ import me.weishu.kernelsu.ui.screen.settings.TeeDiagnostics
  * 现在把判据拆成两件互不依赖的事实，任一为假就修：
  *  - [`snapshot`]：内置树在不在、`keymint` 进程在不在（不读 maps，任何设备都读得到）；
  *  - [`isInjected`]：keystore2 里有没有载荷（可能 `null`，`null` 不再等于健康）。
- * 修复会先 `builtin start`，失败再补一次 `builtin install` 后重试；结果写进 [state]
- * 并且用 Toast 告诉用户，不再静默。
+ * 修复会先 `builtin start`，失败再补一次 `builtin install` 后重试；结果只写进 [state]
+ * 和日志，**不再弹 Toast**（2026-11-18 用户明确要求：TEE 修复功能整体下线，
+ * 不允许开机/进首页时再弹「修复失败」这类提示）。
  */
 object TeeEngineStartup {
     enum class State { Unknown, Ready, Repaired, Failed }
@@ -40,6 +36,8 @@ object TeeEngineStartup {
     private val lock = Mutex()
     private var lastAttemptMs: Long? = null
     private var startedByUser = false
+    /** 本进程内是否已经尝试过修复：失败过就不再反复装/起，避免每次刷新都重跑一遍。 */
+    private var attemptedThisProcess = false
 
     private val _state = MutableStateFlow(State.Unknown)
     val state: StateFlow<State> = _state.asStateFlow()
@@ -103,13 +101,6 @@ object TeeEngineStartup {
             .to(ArrayList<String>(), ArrayList<String>()).exec().isSuccess
     }.getOrDefault(false)
 
-    private fun toast(messageRes: Int) {
-        runCatching {
-            Handler(Looper.getMainLooper()).post {
-                runCatching { Toast.makeText(ksuApp, messageRes, Toast.LENGTH_SHORT).show() }
-            }
-        }
-    }
 
     suspend fun ensureStarted() = withContext(Dispatchers.IO) {
         lock.withLock {
@@ -147,8 +138,10 @@ object TeeEngineStartup {
                     return@withLock
                 }
 
+                if (attemptedThisProcess && !startedByUser) return@withLock
                 val now = SystemClock.elapsedRealtime()
                 if (lastAttemptMs?.let { now - it < 60_000L } == true) return@withLock
+                attemptedThisProcess = true
                 currentCoroutineContext().ensureActive()
                 lastAttemptMs = now
 
@@ -175,10 +168,9 @@ object TeeEngineStartup {
                 if (healthy) {
                     Log.i("TeeEngineStartup", "engine repaired: pid=${after?.keymintPid} injected=$afterInjected")
                     startedByUser = false
-                    toast(R.string.settings_tee_engine_started)
                 } else {
+                    // 静默：这是后台自愈，不是用户操作；失败不该在首页糊一个 Toast。
                     Log.w("TeeEngineStartup", "engine still not running: $after injected=$afterInjected")
-                    toast(R.string.settings_tee_engine_failed)
                 }
                 return@withLock
             }

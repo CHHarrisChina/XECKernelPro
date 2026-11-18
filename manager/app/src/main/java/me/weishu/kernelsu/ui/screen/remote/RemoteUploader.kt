@@ -108,6 +108,49 @@ object RemoteUploader {
         return "$BASE$publicDir/" + URLEncoder.encode(name, "UTF-8").replace("+", "%20")
     }
 
+    /**
+     * 直接上传一段内存字节（2026-11-18：用户自定义背景也要能传到自己服务器）。
+     *
+     * 与 [upload] 共用同一个仅写账号与同一个 `/uploads` 限制；区别只是不经过
+     * `contentResolver`——背景图已经在应用私有目录里，没必要再绕一次 Uri。
+     */
+    fun uploadBytes(rawName: String, bytes: ByteArray, dir: String, onProgress: (Long, Long) -> Unit): String {
+        val token = login()
+        val clean = dir.trim('/').replace(Regex("[^A-Za-z0-9._-]"), "")
+        if (clean.isNotEmpty()) ensureDir(token, clean)
+        val name = "${System.currentTimeMillis()}_${sanitizeName(rawName)}"
+        val remote = if (clean.isEmpty()) "/$name" else "/$clean/$name"
+        val encodedPath = URLEncoder.encode(remote, "UTF-8").replace("+", "%20")
+        val conn = URL("$BASE/api/fs/put").openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "PUT"
+            conn.doOutput = true
+            conn.connectTimeout = 15000
+            conn.readTimeout = 120000
+            conn.setRequestProperty("Authorization", token)
+            conn.setRequestProperty("File-Path", encodedPath)
+            conn.setRequestProperty("Content-Type", "application/octet-stream")
+            conn.setFixedLengthStreamingMode(bytes.size)
+            conn.outputStream.use { output -> output.write(bytes) }
+            onProgress(bytes.size.toLong(), bytes.size.toLong())
+            val code = conn.responseCode
+            val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() } ?: ""
+            val json = try {
+                JSONObject(body)
+            } catch (e: Exception) {
+                null
+            }
+            if (code !in 200..299 || json?.optInt("code", -1) != 200) {
+                throw IOException(json?.optString("message") ?: "HTTP $code")
+            }
+        } finally {
+            conn.disconnect()
+        }
+        val publicDir = if (clean.isEmpty()) PUBLIC_DIR else "$PUBLIC_DIR/$clean"
+        return "$BASE$publicDir/" + URLEncoder.encode(name, "UTF-8").replace("+", "%20")
+    }
+
     /** 建子目录（已存在时 OpenList 也返回成功）；失败不致命，put 会再报一次。 */
     private fun ensureDir(token: String, dir: String) {
         val conn = URL("$BASE/api/fs/mkdir").openConnection() as HttpURLConnection

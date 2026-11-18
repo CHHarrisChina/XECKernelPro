@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.ui.design.token.Xc
 import me.weishu.kernelsu.ui.design.token.XcRadius
@@ -93,6 +94,32 @@ fun GlobalBackgroundSettings() {
                         } catch (_: Exception) {
                             pickerOpen = false
                             Toast.makeText(context, R.string.global_background_failed, Toast.LENGTH_LONG).show()
+                        }
+                    },
+                )
+                TextButton(
+                    text = stringResource(R.string.global_background_upload),
+                    enabled = enabled && settings.image.isNotEmpty(),
+                    onClick = {
+                        perform {
+                            val bytes = store.currentImageBytes()
+                                ?: throw IllegalStateException("no background image")
+                            val url = me.weishu.kernelsu.ui.screen.remote.RemoteUploader.uploadBytes(
+                                rawName = "background-${System.currentTimeMillis()}.png",
+                                bytes = bytes,
+                                dir = "backgrounds",
+                                onProgress = { _, _ -> },
+                            )
+                            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                    as android.content.ClipboardManager
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("xec-background", url))
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.global_background_uploaded, url),
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            }
                         }
                     },
                 )

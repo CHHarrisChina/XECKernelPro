@@ -41,6 +41,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import android.graphics.LinearGradient
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Shader
+import android.graphics.Typeface
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -398,51 +408,30 @@ private fun HomeHeader(
 }
 
 /**
- * 顶栏品牌字：`XECKernel` 静止，`Ultra` 用流动炫光（2026-11-18 用户要求）。
+ * 顶栏品牌字：`XECKernel` 静止，`Ultra` 是一条会流的彩色彗尾（2026-11-18 重做）。
  *
- * 实现分三层，全部走同一个线性渐变：
- *  1. 本体：`TextStyle.brush` + [TileMode.Mirror]，渐变起点随 phase 平移 —— 颜色
- *     在一行字上连续流动，不是逐字闪；
- *  2. 拖尾：三条错位重影，越远越淡，水平做小幅往返，读起来像彗尾；
- *  3. 辉光：同一行字带大半径 [Shadow]，颜色按 phase 从调色板取，形成"亮色晕开"。
+ * 为什么用原生 Canvas Paint 而不是 `TextStyle(brush=...)`：
+ *  - 上一版只靠 TextStyle 的 brush + 一个 shadow，字色在短词上几乎看不出变化，
+ *    用户真机反馈"不炫、没有拖尾"；
+ *  - 原生 `Paint.shader` 可以给渐变加 `setLocalMatrix`，让色带真正沿字面平移；
+ *  - 原生 `drawText` 可以重复画多份（透明度/偏移不同）得到**看得见的彗尾**，
+ *    还能用 `setShadowLayer` 做亮色辉光（硬件画布支持文字阴影）。
  *
- * 降低动态（无障碍 / 省电）时 phase 冻结、拖尾停在静态位置——不做无限动画。
- * 渐变坐标故意给的是固定像素区间 + Mirror，因此不依赖文字实测宽度：
- * 字体缩放变化时左右仍能接上，不会出现"渐变只盖住半个词"。
+ * 三层：彗尾（3 份错位重影，随相位左右扫）→ 辉光（实心亮色+大半径阴影）→ 本体
+ * （流动渐变 + 小半径同色阴影）。降低动态时全部冻结在静态一帧。
  */
-private val UltraBrandColors = listOf(
-    Color(0xFF74FFD9),
-    Color(0xFF4CC9FF),
-    Color(0xFF9A7BFF),
-    Color(0xFFFF7AD9),
-    Color(0xFFFFC94D),
-    Color(0xFF74FFD9),
+private val UltraBrandColors = intArrayOf(
+    0xFF7CFFCB.toInt(),  // 薄荷
+    0xFF3ED2FF.toInt(),  // 冰蓝
+    0xFF8A7BFF.toInt(),  // 紫罗兰
+    0xFFFF7BD5.toInt(),  // 品红
+    0xFFFFC24D.toInt(),  // 亮金
+    0xFF7CFFCB.toInt(),  // 回到起点，Mirror 平铺时首尾相接
 )
 
 @Composable
 private fun UltraBrandTitle(modifier: Modifier = Modifier) {
     val reduced = rememberReducedMotion()
-    val transition = rememberInfiniteTransition(label = "ultraBrand")
-    val flow by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "ultraFlow",
-    )
-    val pulse by transition.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "ultraGlowPulse",
-    )
-    val phase = if (reduced) 0.28f else flow
-    val glow = if (reduced) 0.75f else pulse
     val style = Xc.typography.pageTitle
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         BasicText(
@@ -452,51 +441,97 @@ private fun UltraBrandTitle(modifier: Modifier = Modifier) {
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.width(6.dp))
-        UltraWord(phase = phase, glow = glow, style = style)
+        UltraCometWord(style = style, reduced = reduced)
     }
 }
 
 @Composable
-private fun UltraWord(phase: Float, glow: Float, style: TextStyle) {
-    val brush = remember(phase) {
-        Brush.linearGradient(
-            colors = UltraBrandColors,
-            start = Offset(-240f + phase * 480f, 0f),
-            end = Offset(240f + phase * 480f, 0f),
-            tileMode = TileMode.Mirror,
-        )
-    }
-    val glowColor = remember(phase) {
-        val index = (phase * UltraBrandColors.size).toInt()
-            .coerceIn(0, UltraBrandColors.size - 1)
-        UltraBrandColors[index]
-    }
-    Box {
-        // 拖尾：三条错位重影。相位驱动的是"左右摆幅"，不是透明度循环——
-        // 常驻低不透明度才不会出现整段字忽明忽暗的闪烁。
-        for (index in 1..3) {
-            BasicText(
-                text = "Ultra",
-                style = style.copy(brush = brush),
-                maxLines = 1,
-                modifier = Modifier.graphicsLayer {
-                    translationX = (phase * 8f + index * 6f) * if (index % 2 == 0) -1f else 1f
-                    alpha = 0.18f / index
-                },
-            )
+private fun UltraCometWord(style: TextStyle, reduced: Boolean) {
+    val density = LocalDensity.current
+    val fontSizePx = with(density) { style.fontSize.toPx() }
+    val paint = remember(fontSizePx) {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = fontSizePx
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
-        BasicText(
-            text = "Ultra",
-            style = style.copy(
-                brush = brush,
-                shadow = Shadow(
-                    color = glowColor.copy(alpha = glow * 0.9f),
-                    offset = Offset.Zero,
-                    blurRadius = 22f,
-                ),
-            ),
-            maxLines = 1,
+    }
+    val wordWidth = remember(paint) { paint.measureText("Ultra") }
+    val reservePx = with(density) { 8.dp.toPx() }
+    val heightPx = with(density) { 34.dp.toPx() }
+    val widthDp = with(density) { (wordWidth + reservePx * 2f).toDp() }
+
+    val transition = rememberInfiniteTransition(label = "ultraComet")
+    val flow by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing), RepeatMode.Restart),
+        label = "ultraFlow",
+    )
+    val sweep by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing), RepeatMode.Restart),
+        label = "ultraSweep",
+    )
+    val pulse by transition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "ultraPulse",
+    )
+    val phase = if (reduced) 0.32f else flow
+    val trail = if (reduced) 0f else sweep
+    val glow = if (reduced) 0.75f else pulse
+    val glowColor = Color(UltraBrandColors[(phase * (UltraBrandColors.size - 1)).toInt().coerceIn(0, UltraBrandColors.size - 1)])
+
+    Canvas(
+        modifier = Modifier
+            .width(widthDp)
+            .height(34.dp),
+    ) {
+        val p = paint
+        val baseX = reservePx
+        val fm = p.fontMetrics
+        val baseline = (heightPx + (fm.descent - fm.ascent)) / 2f - fm.descent
+
+        val gradient = LinearGradient(
+            baseX,
+            0f,
+            baseX + wordWidth * 1.15f,
+            0f,
+            UltraBrandColors,
+            null,
+            Shader.TileMode.MIRROR,
         )
+        val matrix = Matrix().apply { setTranslate(phase * wordWidth * 1.15f, 0f) }
+        gradient.setLocalMatrix(matrix)
+
+        // 1) 彗尾：越远越淡，并随 sweep 前后扫动（这就是"拖尾"的可见来源）。
+        val maxTrail = wordWidth * 0.22f
+        for (i in 3 downTo 1) {
+            p.shader = gradient
+            p.alpha = (255 * (0.34f / i)).toInt().coerceIn(0, 255)
+            p.setShadowLayer(0f, 0f, 0f, 0)
+            val dx = -i * (maxTrail / 3f) * (0.35f + trail * 0.65f)
+            drawIntoCanvas { canvas -> canvas.nativeCanvas.drawText("Ultra", baseX + dx, baseline, p) }
+        }
+
+        // 2) 辉光：实心亮色 + 大半径阴影，给彩带一圈同色光晕。
+        p.shader = null
+        p.color = glowColor.toArgb()
+        p.alpha = (140 * glow).toInt().coerceIn(0, 255)
+        p.setShadowLayer(18f, 0f, 0f, glowColor.toArgb())
+        drawIntoCanvas { canvas -> canvas.nativeCanvas.drawText("Ultra", baseX, baseline, p) }
+
+        // 3) 本体：流动渐变 + 小半径阴影，颜色随时间沿字面走。
+        p.shader = gradient
+        p.alpha = 255
+        p.setShadowLayer(7f, 0f, 0f, glowColor.copy(alpha = 0.85f).toArgb())
+        drawIntoCanvas { canvas -> canvas.nativeCanvas.drawText("Ultra", baseX, baseline, p) }
+
+        p.setShadowLayer(0f, 0f, 0f, 0)
+        p.shader = null
+        p.alpha = 255
     }
 }
 

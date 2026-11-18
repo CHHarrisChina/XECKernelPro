@@ -740,6 +740,7 @@ XEC 项目组
     <string name="themes_import">导入主题包</string>
     <string name="themes_import_done">已导入：%1$s</string>
     <string name="themes_import_failed">导入失败：%1$s</string>
+    <string name="themes_link_copied">直链已复制</string>
     <string name="themes_publish">发布到主题商城</string>
     <string name="themes_publish_failed">上传失败：%1$s</string>
     <string name="themes_publish_entry_title">发布我的主题</string>
@@ -747,7 +748,8 @@ XEC 项目组
     <string name="themes_publish_picker_title">选择要发布的主题</string>
     <string name="themes_publish_picker_hint">包会传到 XEC 网盘，主题仓库的机器人 10 分钟内自动收录，不需要 GitHub 账号。</string>
     <string name="themes_publish_picker_empty">还没有可发布的主题。先去「编辑器」做一个，或用 .xectheme 导入一个。</string>
-    <string name="themes_publish_pending">已提交。机器人 10 分钟内收录，之后刷新商城就能看到；下面这条直链也可以贴进 GitHub 表单。</string>
+    <string name="themes_publish_pending">已上传到 XEC 服务器。审核后自动出现在主题商城，稍后刷新即可；不需要 GitHub 账号。</string>
+    <string name="themes_copy_link">复制直链</string>
     <string name="themes_open_form">去 GitHub 开 issue（可选）</string>
     <string name="theme_editor_title">主题编辑器</string>
     <string name="theme_editor_new">新建主题</string>

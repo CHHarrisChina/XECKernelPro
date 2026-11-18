@@ -22,6 +22,15 @@ object ModuleRepoSettings {
     const val DEFAULT_URL =
         "https://cdn.jsdelivr.net/gh/byBOOK10086/XECKernelPro-Modules@main/modules.json"
 
+    /**
+     * 国内镜像（2026-11-18 用户要求：模块仓库源搬进自己的服务器）。
+     *
+     * 索引与模块 ZIP 都已镜像到 42.193.123.248 的 `/modrepo/`，索引里的 `downloadUrl`
+     * 也改写成同一台主机；用默认仓库时它排第一，jsDelivr/raw/官方只做兜底。
+     * 用户自己填了仓库地址时不插队——那是他自己的源。
+     */
+    const val CN_MIRROR_URL = "http://42.193.123.248:5244/d/modrepo/modules.json?v=2"
+
     /** 我们自己仓库的原始地址：jsDelivr 抽风/没清缓存时的第二顺位。 */
     const val RAW_FALLBACK_URL =
         "https://raw.githubusercontent.com/byBOOK10086/XECKernelPro-Modules/main/modules.json"
@@ -52,9 +61,21 @@ object ModuleRepoSettings {
     val primaryUrl: String
         get() = configuredUrl.ifEmpty { DEFAULT_URL }
 
-    /** 依次尝试的源：主源优先，本仓库 raw 次之，官方兜底，重复只试一次。 */
-    fun sources(): List<String> =
-        listOf(primaryUrl, RAW_FALLBACK_URL, OFFICIAL_URL).distinct()
+    /**
+     * 依次尝试的源。
+     *
+     * 用默认仓库：国内镜像 → jsDelivr → raw → 官方兜底；
+     * 用户自填仓库：用户源优先 → 本仓库 raw → 官方兜底（不插国内镜像，
+     * 否则"我填了自己的源却看到别人的索引"这种错会很难查）。
+     */
+    fun sources(): List<String> {
+        val custom = configuredUrl
+        return if (custom.isEmpty()) {
+            listOf(CN_MIRROR_URL, DEFAULT_URL, RAW_FALLBACK_URL, OFFICIAL_URL).distinct()
+        } else {
+            listOf(custom, RAW_FALLBACK_URL, OFFICIAL_URL).distinct()
+        }
+    }
 
     /** 展示用短标签：去掉协议与路径，只留主机（含端口）。 */
     fun hostOf(url: String): String =
@@ -62,6 +83,8 @@ object ModuleRepoSettings {
 
     /** 给人看的源名字：自家仓库/官方仓库说清楚，其它情况退回主机名。 */
     fun labelOf(url: String): String = when {
+        url.contains("42.193.123.248:5244/d/modrepo") -> "XECKernel Ultra 模块仓库（国内镜像）"
+
         url.contains("XECKernelPro-Modules") && url.contains("jsdelivr") ->
             "XECKernel Ultra 模块仓库（jsDelivr）"
 
