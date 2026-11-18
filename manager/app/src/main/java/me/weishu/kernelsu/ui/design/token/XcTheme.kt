@@ -35,7 +35,16 @@ fun XcTheme(
     componentAlpha: Float = 1f,
     content: @Composable () -> Unit,
 ) {
-    val colors = remember(isDark, isAmoled, theme) { theme?.colorsFor(isDark, isAmoled) ?: xcColorsFor(isDark, isAmoled) }
+    val baseColors = remember(isDark, isAmoled, theme) {
+        theme?.colorsFor(isDark, isAmoled) ?: xcColorsFor(isDark, isAmoled)
+    }
+    // 2026-11-18 用户要求「所有底框变透明，也不要描边」：描边/分隔线统一用 glassRim，
+    // 这里把它按同一个组件透明度乘数缩放 —— 滑杆到底（0）时 1px 边线和分隔线一起消失，
+    // 半透明时边线跟着一起淡，不再出现"底色没了、框还在"的残影。
+    val colors = remember(baseColors, componentAlpha) {
+        val alpha = componentAlpha.coerceIn(0f, 1f)
+        if (alpha >= 1f) baseColors else baseColors.copy(glassRim = baseColors.glassRim.scaleAlpha(alpha))
+    }
     // 形状/玻璃/动效是全局的：主题给什么用什么，不给就用默认。
     val shapes = theme?.shapes ?: XcShapesDefault
     val themeGlass = theme?.glass ?: XcGlass.Default
