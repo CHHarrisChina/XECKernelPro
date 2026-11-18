@@ -47,14 +47,17 @@ fun SendLogDialog(
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch(Dispatchers.IO) {
             loadingDialog.show()
-            context.contentResolver.openOutputStream(uri)?.use { output ->
-                getBugreportFile(context).inputStream().use {
-                    it.copyTo(output)
-                }
-            }
+            val failure = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    getBugreportFile(context).inputStream().use {
+                        it.copyTo(output)
+                    }
+                } ?: throw IllegalStateException("cannot open target document")
+            }.exceptionOrNull()
             loadingDialog.hide()
+            val message = if (failure == null) logSavedText else context.getString(R.string.log_save_failed)
             withContext(Dispatchers.Main) {
-                Toast.makeText(context, logSavedText, Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -69,7 +72,7 @@ fun SendLogDialog(
             onClick = {
                 val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH_mm")
                 val current = LocalDateTime.now().format(formatter)
-                exportBugreportLauncher.launch("XECKernel Ultra_bugreport_${current}.tar.gz")
+                exportBugreportLauncher.launch("XECKernelUltra_bugreport_${current}.tar.gz")
                 onDismissRequest()
             },
         )
@@ -79,31 +82,30 @@ fun SendLogDialog(
             onClick = {
                 scope.launch {
                     onDismissRequest()
-                    val bugreport = loadingDialog.withLoading {
-                        withContext(Dispatchers.IO) {
-                            getBugreportFile(context)
+                    // 生成/分享失败只提示，不让 FileProvider 的异常把整个页面带崩。
+                    val failure = runCatching {
+                        val bugreport = loadingDialog.withLoading {
+                            withContext(Dispatchers.IO) {
+                                getBugreportFile(context)
+                            }
                         }
-                    }
-
-                    val uri: Uri =
-                        FileProvider.getUriForFile(
+                        val uri: Uri = FileProvider.getUriForFile(
                             context,
                             "${BuildConfig.APPLICATION_ID}.fileprovider",
-                            bugreport
+                            bugreport,
                         )
-
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        setDataAndType(uri, "application/gzip")
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            setDataAndType(uri, "application/gzip")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, sendLogText))
+                    }.exceptionOrNull()
+                    if (failure != null) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, R.string.log_save_failed, Toast.LENGTH_LONG).show()
+                        }
                     }
-
-                    context.startActivity(
-                        Intent.createChooser(
-                            shareIntent,
-                            sendLogText
-                        )
-                    )
                 }
             },
         )

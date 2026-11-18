@@ -291,6 +291,7 @@ XEC Project Team
     <string name="flash_failed">Flash failed</string>
     <string name="selected_lkm">Selected LKM: %s</string>
     <string name="save_log">Save logs</string>
+    <string name="log_save_failed">Could not create or share the log archive</string>
     <string name="log_saved">Logs saved</string>
     <string name="settings_sucompat">Classic SU command</string>
     <string name="settings_sucompat_summary">Allow Root access via /system/bin/su, in new processes</string>

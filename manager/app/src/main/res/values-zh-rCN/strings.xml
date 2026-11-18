@@ -279,6 +279,7 @@ XEC 项目组
     <string name="flash_failed">刷写失败</string>
     <string name="selected_lkm">已选择的 LKM：%s</string>
     <string name="save_log">保存日志</string>
+    <string name="log_save_failed">生成或分享日志失败</string>
     <string name="log_saved">日志已保存</string>
     <string name="settings_mode_enable_by_default">启用（默认）</string>
     <string name="settings_mode_disable_until_reboot">禁用直到下次重启</string>

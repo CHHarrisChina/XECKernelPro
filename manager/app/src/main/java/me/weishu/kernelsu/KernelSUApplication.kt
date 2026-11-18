@@ -38,6 +38,24 @@ open class KernelSUApplication : Application(), ViewModelStoreOwner {
         getSystemService(UserManager::class.java)?.isUserUnlocked == true
 
     override fun onCreate() {
+        // 31438：任何未捕获异常都落一份到 filesDir/crash/last-crash.txt，方便用户把
+        // 「模块页授权闪退 / 发送日志闪退」这类没有界面的崩溃直接发回来定位。
+        runCatching {
+            val previous = Thread.getDefaultUncaughtExceptionHandler()
+            Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+                runCatching {
+                    val dir = java.io.File(filesDir, "crash").apply { mkdirs() }
+                    val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+                        .format(java.util.Date())
+                    java.io.File(dir, "last-crash.txt").writeText(
+                        "time: $stamp\nthread: ${thread.name}\n\n" +
+                            android.util.Log.getStackTraceString(throwable),
+                    )
+                }
+                previous?.uncaughtException(thread, throwable)
+            }
+        }
+
         super.onCreate()
         ksuApp = this
 
