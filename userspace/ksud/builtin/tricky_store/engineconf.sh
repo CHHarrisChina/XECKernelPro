@@ -163,7 +163,10 @@ log_target_coverage() {
 # 不满足时全部剥掉，让它们走真实 TEE。手动关闭：
 #   touch /data/adb/.xudc_secure/verifier_forge_off
 DETECTOR_PKGS='com.eltavine.duckdetector
+com.studio.duckdetector
 com.chunqiunativecheck
+chunqiu.safe.detector
+com.maple.detect
 io.github.vvb2060.keyattestation
 io.github.vvb2060.mahoshojo
 io.github.qwq233.keyattestation
@@ -178,26 +181,58 @@ _detector_re() {
     printf '%s\n' $DETECTOR_PKGS | tr '\n' '|' | sed -e 's/|$//' -e 's/\./\\./g'
 }
 
-# 打印 `ok days_left root_type`；找不到 TA 引擎就当"没有健康度信息"。
+# 定位 ta-enhanced 可执行文件。2026-11-18 修：原来只有 module 根下 `bin/ta-enhanced`
+# 一条路径，而 CI 产物是 `bin/<ABI>/ta-enhanced`（见 .github/scripts/build-builtin-modules.sh
+# 的 `cp -f "$ta_bin" "$BUILTIN/TA_enhanced/bin/$ABI/ta-enhanced"`），TA 的 service.sh 又会把它
+# stage 到 /data/adb/.xudc_secure 与 /data/adb/tricky_store/ta-enhanced/bin。路径对不上 =
+# 健康度永远取不到 = 检测工具被整批剥出 target.txt = 春秋/鸭子拿到真实 TEE（必爆 TEE）。
 # 用 TA_ENHANCED_BIN 可覆盖（离线单测 / 非标准安装路径都用它）。
-_keybox_health_line() {
+_ta_enhanced_bin() {
     local _bin
     for _bin in "${TA_ENHANCED_BIN:-}" \
         /data/adb/.xudc_secure/ta-enhanced/bin/ta-enhanced \
+        /data/adb/ksu/builtin/TA_enhanced/bin/arm64-v8a/ta-enhanced \
         /data/adb/ksu/builtin/TA_enhanced/bin/ta-enhanced \
-        /data/adb/modules/TA_enhanced/bin/ta-enhanced; do
+        /data/adb/modules/TA_enhanced/bin/arm64-v8a/ta-enhanced \
+        /data/adb/modules/TA_enhanced/bin/ta-enhanced \
+        /data/adb/tricky_store/ta-enhanced/bin/ta-enhanced; do
         [ -n "$_bin" ] || continue
         [ -x "$_bin" ] || continue
-        "$_bin" keybox health 2>/dev/null | head -n 1
+        printf '%s\n' "$_bin"
         return 0
     done
     return 1
 }
 
+# 打印 `ok days_left root_type`；找不到 TA 引擎（或它还没就绪）时返回非零，调用方按
+# "没有健康度信息"处理。必须用输出为空来区分"没找到"，不能找到一个可执行文件就 return 0
+# ——原来那样会返回一行空串，_route_decision 直接判 off，首启阶段检测工具被永久剥离。
+_keybox_health_line() {
+    local _bin _line
+    _bin=$(_ta_enhanced_bin) || return 1
+    if command -v timeout >/dev/null 2>&1; then
+        _line=$(timeout 10 "$_bin" keybox health 2>/dev/null | head -n 1)
+    else
+        _line=$("$_bin" keybox health 2>/dev/null | head -n 1)
+    fi
+    [ -n "$_line" ] || return 1
+    printf '%s\n' "$_line"
+    return 0
+}
+
 _route_decision() {
     local _line _ok _days _root
     if ! _line=$(_keybox_health_line) || [ -z "$_line" ]; then
-        printf 'off no-engine\n'
+        # 2026-11-18 修：健康度取不到时**不再剥离检测工具**。
+        # 之前这里输出 `off no-engine`，后果是春秋/鸭子被剔出 target.txt → 不进 OMY 的
+        # scoop → 拿到设备真实 TEE（真解锁），TEE 卡必红。取不到健康度的原因通常是
+        # ta-enhanced 还没 stage（首启时序），此时我们的内置箱子仍是出厂那份，
+        # 注入的链至少是"我们的链"；两害相权，注入远好于裸奔。
+        if [ -f "$RUNTIME/keybox.xml" ]; then
+            printf 'on no-health (inject; health probe not ready)\n'
+        else
+            printf 'off no-health+no-keybox\n'
+        fi
         return 0
     fi
     set -- $_line
@@ -217,12 +252,21 @@ _route_decision() {
     esac
     case "$_days" in
         ''|*[!0-9-]*)
-            printf 'off days=unknown\n'
+            # ok=1 但 days 解析不出来：箱子能验过，按可用处理，别再把检测工具剥掉。
+            printf 'on days=unknown root=%s\n' "$_root"
             return 0
             ;;
     esac
+    if [ "$_days" -lt 1 ]; then
+        # 叶子已经过期/今天到期：注入只会递出过期证书，比裸奔更糟，维持剥离。
+        printf 'off days=%s-expired\n' "$_days"
+        return 0
+    fi
     if [ "$_days" -lt 7 ]; then
-        printf 'off days=%s\n' "$_days"
+        # 2026-11-18 修：门槛从 7 天降到 1 天。keybox 的叶子只有 14 天有效期
+        # （Yurikey70: 2026-11-11..2026-11-25），按 ≥7 天判就等于每两周有一半时间
+        # 把检测工具剥掉——用户这次报的"引擎都开着还爆 TEE"就是这个窗口。
+        printf 'on days=%s-expiring root=%s\n' "$_days" "$_root"
         return 0
     fi
     printf 'on days=%s root=%s\n' "$_days" "$_root"
@@ -339,4 +383,126 @@ sync_scoop() {
         return 1
     fi
     return 0
+}
+
+# ---------------------------------------------------------------------------
+# keybox 自愈（2026-11-18）
+#
+# 为什么需要：内置 Yurikey 箱子的叶子只有 14 天有效期（Yurikey70: 2026-11-11..11-25），
+# 上游一换代、叶子一过期，engineconf 的验机工具路由就会判 off，检测工具被剥出
+# target.txt → 拿到真实 TEE → 春秋/鸭子的 TEE 卡必红。而 APK 内置副本在用户手机上
+# 无法自己更新。这里在"快到期(<=10 天)"时从**我们自己的镜像**取当期箱子
+# （客户端不访问 GitHub 上游），用 ta-enhanced 完整校验通过后原子替换 live 副本，
+# 由服务端 /keybox/yurikey 的刷新节奏驱动自愈；健康时完全不联网。
+#
+# 只换单箱文件：OMY 的解析器按 TS 语义只认一个 <Keybox>（RSA+EC 两个 Key entry），
+# 不能把"多箱子合并文档"（/d/keybox/xec）喂给引擎——那是给管理器密钥池用的。
+XEC_KEYBOX_FEED=${XEC_KEYBOX_FEED:-http://42.193.123.248:5244/d/keybox/yurikey}
+
+_busybox_bin() {
+    local c
+    for c in /data/adb/ksu/bin/busybox /data/adb/xudc/bin/busybox; do
+        [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+    done
+    c=$(command -v busybox 2>/dev/null)
+    [ -n "$c" ] || return 1
+    printf '%s\n' "$c"
+}
+
+# 当前 live 箱子的剩余天数；取不到打 -1。
+_keybox_days_left() {
+    local _line
+    _line=$(_keybox_health_line) || { printf '%s\n' -1; return 0; }
+    set -- $_line
+    printf '%s\n' "${2:--1}"
+}
+
+refresh_keybox_if_stale() {
+    local live="$RUNTIME/keybox.xml" days stamp now ago raw xml bb ta
+    [ -f "$live" ] || return 0
+    days=$(_keybox_days_left)
+    case "$days" in
+        ''|*[!0-9-]*) days=-1 ;;
+    esac
+    # 健康（>10 天）就什么都不做——这条路径默认零网络。
+    if [ "$days" -gt 10 ] 2>/dev/null; then
+        return 0
+    fi
+    stamp="$RUNTIME/.keybox_feed.stamp"
+    now=$(date +%s 2>/dev/null || echo 0)
+    ago=$(( now - $(cat "$stamp" 2>/dev/null || echo 0) ))
+    [ "$ago" -ge 3600 ] || return 0
+    printf '%s\n' "$now" > "$stamp" 2>/dev/null
+    command -v worker_lock >/dev/null 2>&1 && { worker_lock keybox-refresh || return 0; }
+
+    raw="$RUNTIME/.keybox_feed.raw"
+    xml="$RUNTIME/.keybox_feed.xml"
+    rm -f "$raw" "$xml"
+    bb=$(_busybox_bin)
+    if [ -n "$bb" ]; then
+        "$bb" wget -q -T 20 -O "$raw" "$XEC_KEYBOX_FEED" 2>/dev/null || rm -f "$raw"
+    fi
+    if [ ! -s "$raw" ] && command -v curl >/dev/null 2>&1; then
+        curl -fsSL --max-time 20 -o "$raw" "$XEC_KEYBOX_FEED" 2>/dev/null || rm -f "$raw"
+    fi
+    if [ ! -s "$raw" ]; then
+        log_line "WARN keybox feed: fetch failed (days_left=$days); keeping the live copy"
+        return 1
+    fi
+    if grep -q '<AndroidAttestation' "$raw" 2>/dev/null; then
+        cp -f "$raw" "$xml" 2>/dev/null
+    else
+        [ -n "$bb" ] && "$bb" base64 -d "$raw" > "$xml" 2>/dev/null
+        if [ ! -s "$xml" ] && command -v base64 >/dev/null 2>&1; then
+            base64 -d "$raw" > "$xml" 2>/dev/null
+        fi
+    fi
+    if ! grep -q '<AndroidAttestation' "$xml" 2>/dev/null; then
+        log_line "WARN keybox feed: payload is not an AndroidAttestation document; ignored"
+        rm -f "$raw" "$xml"
+        return 1
+    fi
+    if cmp -s "$xml" "$live" 2>/dev/null; then
+        log_line "INFO keybox feed: feed copy identical to live copy (days_left=$days)"
+        rm -f "$raw" "$xml"
+        return 0
+    fi
+    ta=$(_ta_enhanced_bin)
+    if [ -n "$ta" ]; then
+        if command -v timeout >/dev/null 2>&1; then
+            timeout 30 "$ta" keybox validate "$xml" >/dev/null 2>&1 || ta=
+        else
+            "$ta" keybox validate "$xml" >/dev/null 2>&1 || ta=
+        fi
+        if [ -z "$ta" ]; then
+            log_line "WARN keybox feed: candidate failed ta-enhanced validation; keeping the live copy"
+            rm -f "$raw" "$xml"
+            return 1
+        fi
+    fi
+    cp -f "$live" "$RUNTIME/keybox.xml.bak" 2>/dev/null
+    chmod 644 "$xml" 2>/dev/null
+    if mv -f "$xml" "$live" 2>/dev/null; then
+        _kb_new_days=$(_keybox_days_left)
+        log_line "INFO keybox feed: installed fresh keybox (was days_left=$days, now days_left=$_kb_new_days, DeviceID=$(sed -n 's/.*DeviceID="\([^"]*\)".*/\1/p' "$live" 2>/dev/null | head -n 1))"
+        rm -f "$raw"
+        return 0
+    fi
+    log_line "ERROR keybox feed: failed to install candidate"
+    rm -f "$raw" "$xml"
+    return 1
+}
+
+# 只读诊断：把「证明里会写什么」与「运行时属性实际是什么」并排写进 .engine.log，
+# 供真机排查 2.3.0「检测到TEE伪装模块」的子项（补丁级别 / vbmeta 摘要 / 应用身份）。
+# 不写任何配置文件——OMY 的 config.toml 是它自己的真源，改坏了 keymint 会起不来。
+log_attest_trust_state() {
+    local cfg="$OMK_DIR/config.toml" trust sp vp bp
+    sp=$(getprop ro.build.version.security_patch 2>/dev/null)
+    vp=$(getprop ro.vendor.build.security_patch 2>/dev/null)
+    bp=$(getprop ro.boot.boot_patch_level 2>/dev/null)
+    trust=$(sed -n '/^\[trust\]/,/^\[/p' "$cfg" 2>/dev/null \
+        | grep -E 'security_patch|os_patchlevel|vendor_patchlevel|boot_patchlevel|verified_boot_state|device_locked' \
+        | tr '\n' ' ')
+    log_line "INFO trust: prop[security_patch]=${sp:-none} prop[vendor_patch]=${vp:-none} prop[boot_patch]=${bp:-none} vbmeta_digest=$([ -n "$(getprop ro.boot.vbmeta.digest 2>/dev/null)" ] && echo set || echo missing) omk=${trust:-no-config}"
 }

@@ -323,6 +323,30 @@ sync_scoop
 label_data_path "$DATA"
 
 # ---------------------------------------------------------------------------
+# /data/local/tmp 归位（Maple 五：「临时目录权限检测 / 归属检测 / 时间戳检测」）
+#
+# 普通应用默认就能 stat/lstat 这个目录：模块或隐藏工具把它改成 777、把属主从
+# shell:shell 改掉、或者留下改过时间戳的残留，都会成为命中的直接证据。这里只在
+# 权限/属主偏离 Android 默认态时归位一次（幂等），不删内容、不回写时间戳——回写
+# mtime/ctime 本身会造出新的「状态变更晚于修改」差异，正是文档里点名不要做的。
+# ---------------------------------------------------------------------------
+normalize_local_tmp() {
+    local d=/data/local/tmp _mode _uid _gid
+    [ -d "$d" ] || return 0
+    _mode=$(stat -c %a "$d" 2>/dev/null)
+    _uid=$(stat -c %u "$d" 2>/dev/null)
+    _gid=$(stat -c %g "$d" 2>/dev/null)
+    if [ -n "$_mode" ] && [ "$_mode" != "771" ]; then
+        chmod 771 "$d" 2>/dev/null && log_line "INFO tmpdir: /data/local/tmp mode $_mode -> 771"
+    fi
+    # shell = uid/gid 2000
+    if [ -n "$_uid" ] && { [ "$_uid" != "2000" ] || [ "$_gid" != "2000" ]; }; then
+        chown 2000:2000 "$d" 2>/dev/null && log_line "INFO tmpdir: /data/local/tmp owner $_uid:$_gid -> 2000:2000"
+    fi
+}
+normalize_local_tmp
+
+# ---------------------------------------------------------------------------
 # 启动两个守护进程（OMY 自己的看护脚本，内部会自动重启子进程）
 # ---------------------------------------------------------------------------
 # 幂等启动：管理器/TA 都可能再跑一次 service.sh，重复拉起会得到两份看护循环，
@@ -409,6 +433,13 @@ capture_engine_state() {
     if [ -n "$logtail" ]; then
         printf 'INFO engine omk log:\n%s\n' "$logtail" >> "$LOG_FILE" 2>/dev/null
     fi
+    # 45s 复算：首启时 ta-enhanced 可能还没 stage，engineconf 的验机工具路由会先按
+    # "no-health" 注入；这里等 TA 就绪后再按真实 keybox 健康度收敛一次，并顺手做
+    # keybox 自愈（只读健康时零网络）。日志里能看到最终 route。
+    apply_detector_routing
+    sync_scoop
+    refresh_keybox_if_stale && mirror_keybox
+    log_attest_trust_state
     log_target_coverage
 }
 
@@ -460,7 +491,14 @@ engine_watchdog() {
     sync_scoop
     mirror_keybox
     _n=$((_n + 1))
-    [ $((_n % 20)) -eq 0 ] && apply_detector_routing
+    # 首启 10 分钟每 1 分钟重算一次验机工具路由（ta-enhanced 可能还没 stage），稳定后
+    # 降到 5 分钟一次；keybox 自愈每轮都判一次健康度（健康时零网络，内部 1h 节流）。
+    if [ "$_n" -le 40 ]; then
+        [ $((_n % 4)) -eq 0 ] && apply_detector_routing
+    else
+        [ $((_n % 20)) -eq 0 ] && apply_detector_routing
+    fi
+    [ $((_n % 4)) -eq 0 ] && { refresh_keybox_if_stale && mirror_keybox; }
   done ) >/dev/null 2>&1 &
 
 exit 0
