@@ -180,8 +180,8 @@ fun ToolsScreen() {
                     )
                     Xc8Panel {
                         Xc8Row(
-                            title = "磁贴开始屏幕（磁吸）",
-                            subtitle = "长按拖动、自动吸附、手柄缩放，位置会记住",
+                            title = "磁贴开始屏幕（布局编辑器）",
+                            subtitle = "网格参考线、拖动磁吸、手柄缩放、增删磁贴与换色",
                             leading = Icons.Rounded.Extension,
                             onClick = { navigator.push(Route.HomeTiles) },
                             trailing = { Xc8Chevron() },
