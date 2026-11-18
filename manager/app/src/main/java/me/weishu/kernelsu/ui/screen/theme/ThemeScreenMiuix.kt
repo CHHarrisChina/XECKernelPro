@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import me.weishu.kernelsu.R
+import me.weishu.kernelsu.data.theme.ThemeRepository
 import me.weishu.kernelsu.ui.component.dialog.XDialog
 import me.weishu.kernelsu.ui.component.dialog.XDialogTitle
 import me.weishu.kernelsu.ui.design.token.Xc
@@ -175,12 +176,19 @@ fun ThemeScreenMiuix(
     }
 
     // 发布前的"选一个主题"对话框：入口在商城页顶部（也仍然在「我的」每张卡片上）。
+    //
+    // 2026-11-18 用户反馈：这里只该出现**用户自己调试出来的主题**，不能把系统/商店自带的
+    // 箱子（琥珀 / 青瓷 / 紫罗兰示例等）也列出来。商店下载落的主题带 `.store` 标记
+    // （Origin.STORE，见 ThemeRepository.load），编辑器保存与 .xectheme 导入的都是
+    // 用户自己的（LOCAL / IMPORTED），所以这里只过滤 STORE —— 「我的」页本身不变，
+    // 用户仍然能从「我的」看到并使用商店主题。
+    val ownThemes = state.mine.filter { it.origin != ThemeRepository.Origin.STORE }
     XDialog(show = publishPicker, onDismissRequest = onDismissPublishPicker) {
         XDialogTitle(
             text = stringResource(R.string.themes_publish_picker_title),
             summary = stringResource(R.string.themes_publish_picker_hint),
         )
-        if (state.mine.isEmpty()) {
+        if (ownThemes.isEmpty()) {
             Text(
                 text = stringResource(R.string.themes_publish_picker_empty),
                 fontSize = 15.sp,
@@ -196,7 +204,7 @@ fun ThemeScreenMiuix(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp),
             ) {
-                state.mine.forEach { entry ->
+                ownThemes.forEach { entry ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

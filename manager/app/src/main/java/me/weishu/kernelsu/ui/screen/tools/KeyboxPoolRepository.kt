@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import me.weishu.kernelsu.ksuApp
 import me.weishu.kernelsu.ui.util.awaitRootShell
 import me.weishu.kernelsu.ui.util.shQuote
 import okhttp3.OkHttpClient
@@ -19,7 +20,9 @@ import java.io.StringWriter
 import java.security.KeyFactory
 import java.security.MessageDigest
 import java.security.Signature
+import java.security.cert.CertificateExpiredException
 import java.security.cert.CertificateFactory
+import java.security.cert.CertificateNotYetValidException
 import java.security.cert.X509Certificate
 import java.security.spec.PKCS8EncodedKeySpec
 import java.util.Date
@@ -30,30 +33,18 @@ internal object KeyboxPoolRepository {
     private const val MAX_BYTES = 1_048_576
     private const val LIMIT = 10
     private const val CLI = "/data/adb/.xudc_secure/ta-enhanced/bin/ta-enhanced"
-    // Same fixed feeds and encodings as tricky-addon-enhanced/rust/src/keybox/sources.rs.
-    //
-    // 2026-11-17 真机反馈「密钥池找不到密钥」：两路上游都在 raw.githubusercontent.com，
-    // 国内直连被重置，于是每次都稳定 0 个候选。现在每个源都是一组有序地址：
-    // **国内镜像 → jsDelivr → 官方 raw**。国内镜像由 `_scratch/keybox_mirror.py` 维护
-    // （原样字节，客户端解码/校验逻辑一个字没改）。
+    // 2026-11-18 用户要求：密钥池不再走任何上游 keybox 地址（Yurikey/Tricky 的
+    // GitHub 路径全部删掉），只读我们自己的国内镜像。`_scratch/keybox_mirror.py`
+    // 把当期 RKP 箱与一份长期有效的旧箱合并后上传到 `/keybox/xec`，客户端不再
+    // 接触上游；断网时还有 APK 内置副本和设备上已装的 keybox 兜底。
     private val sources = listOf(
         Source(
-            "Yurikey",
+            "XECKernel Ultra 密钥箱",
             listOf(
+                "http://42.193.123.248:5244/d/keybox/xec",
                 "http://42.193.123.248:5244/d/keybox/yurikey",
-                "https://cdn.jsdelivr.net/gh/Yurii0307/yurikey@main/key",
-                "https://raw.githubusercontent.com/Yurii0307/yurikey/main/key",
             ),
             false,
-        ),
-        Source(
-            "Tricky Addon upstream",
-            listOf(
-                "http://42.193.123.248:5244/d/keybox/tricky-addon-extra",
-                "https://cdn.jsdelivr.net/gh/KOWX712/Tricky-Addon-Update-Target-List@keybox/.extra",
-                "https://raw.githubusercontent.com/KOWX712/Tricky-Addon-Update-Target-List/keybox/.extra",
-            ),
-            true,
         ),
     )
     private val client = OkHttpClient.Builder()
@@ -62,12 +53,19 @@ internal object KeyboxPoolRepository {
 
     private class Source(val name: String, val urls: List<String>, val hex: Boolean)
 
+    /** 校验失败的原因码。只放固定文案，绝不带密钥、证书或响应正文。 */
+    private class Rejected(val reason: String) : Exception(reason)
+
+    private fun reasonText(error: Throwable): String =
+        if (error is Rejected) error.reason else "结构、私钥或证书链不符"
+
     /** One feed's outcome, so the UI can say *why* nothing came back. */
     private class SourceResult(
         val candidates: List<Candidate>,
         val rejected: Int,
         val reachable: Boolean,
         val empty: Boolean,
+        val rejectReason: String? = null,
     )
 
     class Candidate(
@@ -90,6 +88,11 @@ internal object KeyboxPoolRepository {
         val text = StringBuilder()
         fun only(name: String) = children.single { it.name == name }
     }
+
+    // APK 内置副本：`_scratch/keybox_build_feed.py` 把当期 RKP 箱与一份长期有效的
+    // 旧箱合并写进 assets，随包发布。断网、没有 root 时它也能直接应用，池子不会
+    // 再出现「0 份」——这是不走上游路径之后的第一条来源。
+    private const val ASSET_KEYBOX = "xec_keybox.xml"
 
     // 设备上已经装好的 keybox。内置引擎随包带了一份（userspace/ksud/builtin/
     // tricky_store/keybox.xml 会装进模块目录），TrickyStore 系引擎还有自己的拷贝。
@@ -137,9 +140,41 @@ internal object KeyboxPoolRepository {
                 if (found.isNotEmpty()) break
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
-                notices += "设备内置 keybox：$path 没通过本地校验。"
+            } catch (error: Exception) {
+                notices += "设备内置 keybox：$path 没通过本地校验（${reasonText(error)}）。"
             }
+        }
+        return found to notices
+    }
+
+    /** APK 内置副本：不需要网络也不需要 root，池子离线时也至少有一份。 */
+    private fun assetCandidates(): Pair<List<Candidate>, List<String>> {
+        val found = mutableListOf<Candidate>()
+        val notices = mutableListOf<String>()
+        val raw = runCatching { ksuApp.assets.open(ASSET_KEYBOX).use { it.readBytes() } }.getOrNull()
+        if (raw == null || raw.isEmpty()) {
+            notices += "内置密钥箱：APK 资源读取失败，跳过。"
+            return found to notices
+        }
+        try {
+            val root = parse(raw)
+            check(root.name == "AndroidAttestation")
+            var rejected = 0
+            var lastReason: String? = null
+            for (box in root.children.filter { it.name == "Keybox" }) {
+                if (found.size >= LIMIT) break
+                try {
+                    found += validate(box, "内置", "asset://$ASSET_KEYBOX", null)
+                } catch (error: Exception) {
+                    rejected++
+                    lastReason = reasonText(error)
+                }
+            }
+            if (rejected > 0) {
+                notices += "内置密钥箱：$rejected 份未通过本地校验（$lastReason）。"
+            }
+        } catch (_: Exception) {
+            notices += "内置密钥箱：XML 解析失败，跳过。"
         }
         return found to notices
     }
@@ -147,20 +182,27 @@ internal object KeyboxPoolRepository {
     suspend fun fetch(): Pool = withContext(Dispatchers.IO) {
         val candidates = linkedMapOf<String, Candidate>()
         val notices = mutableListOf<String>()
-        // 1) 本地已装 keybox 先列：不依赖网络，离线也能应用，池子不再是 0。
+        // 1) APK 内置副本：断网、无 root 也能列出来，池子离线不会是 0。
+        val (builtin, builtinNotices) = assetCandidates()
+        builtin.forEach { candidates.putIfAbsent(it.id, it) }
+        notices += builtinNotices
+        if (builtin.isNotEmpty()) {
+            notices += "内置密钥箱：已列出 ${builtin.size} 份，可直接应用。"
+        }
+        // 2) 设备上已装 keybox：不依赖网络，离线也能应用。
         val (local, localNotices) = localCandidates()
         local.forEach { candidates.putIfAbsent(it.id, it) }
         notices += localNotices
         if (local.isNotEmpty()) {
             notices += "设备内置 keybox：已列出 ${local.size} 份，可直接应用。"
         }
-        // 2) 上游源：国内镜像 → jsDelivr → 官方 raw，拿到可用候选就停。
+        // 3) 我们自己的国内镜像（唯一的上游入口，不再碰 GitHub）。
         for (source in sources) {
             currentCoroutineContext().ensureActive()
             var result: SourceResult? = null
             var lastError: Exception? = null
-            // Try the domestic mirror first, then the public mirrors; stop at the first
-            // address that yields at least one usable keybox.
+            // Try our mirror paths in order; stop at the first address that yields a
+            // usable keybox.
             for (url in source.urls) {
                 currentCoroutineContext().ensureActive()
                 try {
@@ -180,11 +222,13 @@ internal object KeyboxPoolRepository {
             outcome.candidates.forEach { candidates.putIfAbsent(it.id, it) }
             when {
                 outcome.candidates.isNotEmpty() && outcome.rejected > 0 ->
-                    notices += "${source.name}：${outcome.rejected} 份未通过本地校验。"
+                    notices += "${source.name}：${outcome.rejected} 份未通过本地校验" +
+                        (outcome.rejectReason?.let { "（$it）" } ?: "") + "。"
                 outcome.candidates.isEmpty() && outcome.empty ->
-                    notices += "${source.name}：上游当前为空。"
+                    notices += "${source.name}：镜像当前为空。"
                 outcome.candidates.isEmpty() && outcome.reachable ->
-                    notices += "${source.name}：没有 keybox 通过本地校验。"
+                    notices += "${source.name}：没有 keybox 通过本地校验" +
+                        (outcome.rejectReason?.let { "（$it）" } ?: "") + "。"
                 else -> Unit
             }
         }
@@ -230,7 +274,13 @@ internal object KeyboxPoolRepository {
             } else {
                 raw
             }
-            val xml = Base64.decode(encoded.filterNot { it.isWhitespace() }, Base64.DEFAULT)
+            // 镜像既可以是 base64 文本，也可以直接是明文 XML：明文省掉一层编码，
+            // 手工上传/排障时更不容易出错。
+            val xml = if (encoded.trimStart().startsWith('<')) {
+                encoded.toByteArray(Charsets.UTF_8)
+            } else {
+                Base64.decode(encoded.filterNot { it.isWhitespace() }, Base64.DEFAULT)
+            }
             check(xml.size <= MAX_BYTES) { "decoded payload too large" }
             val root = parse(xml)
             check(root.name == "AndroidAttestation") { "unexpected root element" }
@@ -238,6 +288,7 @@ internal object KeyboxPoolRepository {
             check(boxes.isNotEmpty()) { "no keybox element" }
             val accepted = mutableListOf<Candidate>()
             var rejected = 0
+            var rejectReason: String? = null
             for (box in boxes) {
                 currentCoroutineContext().ensureActive()
                 if (accepted.size >= LIMIT) break
@@ -245,11 +296,12 @@ internal object KeyboxPoolRepository {
                     accepted += validate(box, source.name, url, response.header("Last-Modified"))
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (_: Exception) {
+                } catch (error: Exception) {
                     rejected++
+                    rejectReason = rejectReason ?: reasonText(error)
                 }
             }
-            return SourceResult(accepted, rejected, reachable = true, empty = false)
+            return SourceResult(accepted, rejected, reachable = true, empty = false, rejectReason = rejectReason)
         }
     }
 
@@ -312,7 +364,15 @@ internal object KeyboxPoolRepository {
             check(chain.size in 2..8)
             check(chainNode.only("NumberOfCertificates").text.toString().trim().toInt() == chain.size)
             check(chain.first().publicKey.algorithm.equals(algorithm, true))
-            chain.forEach { it.checkValidity(Date()) }
+            chain.forEach {
+                try {
+                    it.checkValidity(Date())
+                } catch (_: CertificateExpiredException) {
+                    throw Rejected("证书已过期")
+                } catch (_: CertificateNotYetValidException) {
+                    throw Rejected("证书尚未生效（检查设备时间）")
+                }
+            }
             for (i in 0 until chain.lastIndex) {
                 check(chain[i].issuerX500Principal == chain[i + 1].subjectX500Principal)
                 check(chain[i + 1].basicConstraints >= 0)
@@ -337,7 +397,19 @@ internal object KeyboxPoolRepository {
                 val signatureAlgorithm = if (algorithm == "RSA") "SHA256withRSA" else "SHA256withECDSA"
                 val challenge = "KernelSU keybox pool key match".toByteArray(Charsets.US_ASCII)
                 val signature = Signature.getInstance(signatureAlgorithm).run { initSign(privateKey); update(challenge); sign() }
-                check(Signature.getInstance(signatureAlgorithm).run { initVerify(chain.first()); update(challenge); verify(signature) })
+                // 用 PublicKey 初始化，不用 Certificate 重载：RKP 箱的第一张证书是
+                // keyUsage=keyCertSign 的 TEE CA 证书，`initVerify(Certificate)` 会按
+                // keyUsage 判它不能验签，直接抛 InvalidKeyException("Wrong key usage")。
+                // 2026-11-18 真机「可用 0 / 10」就是这里——箱子本身完全合格，是校验
+                // 自己把它全否了。PrivateKey→PublicKey 的配对语义不变。
+                val matched = runCatching {
+                    Signature.getInstance(signatureAlgorithm).run {
+                        initVerify(chain.first().publicKey)
+                        update(challenge)
+                        verify(signature)
+                    }
+                }.getOrDefault(false)
+                if (!matched) throw Rejected("私钥与证书不匹配")
                 if (pkcs8 !== raw) pkcs8.fill(0)
             } finally { raw.fill(0) }
             certificates += chain

@@ -118,6 +118,14 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object Tools : Route
 
+    /**
+     * 磁贴开始屏幕：Metro 磁贴板（4 列网格 + 磁吸拖动 + 手柄缩放 + 布局持久化）。
+     * 目前从工具箱进入，下一版接成真正的首页。
+     */
+    @Parcelize
+    @Serializable
+    data object HomeTiles : Route
+
     /** SUSFS 管理：与 SukiSU Nova 同款的内核级隐藏/伪装开关页（从设置页进入）。 */
     @Parcelize
     @Serializable

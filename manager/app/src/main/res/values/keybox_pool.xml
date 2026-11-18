@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="keybox_pool_title">Keybox pool</string>
-    <string name="keybox_pool_limits">Fetches up to 10 distinct keyboxes from the two fixed upstream feeds. Select one, then apply to replace the software engine keybox using the existing import command. This does not provision hardware TEE. Revocation and attestation acceptance are unknown; certificate dates do not establish either. Applying pauses automatic keybox replacement to retain your choice. Total user count: unknown (no generic public endpoint).</string>
-    <string name="keybox_pool_loading">Fetching and validating upstream keyboxes…</string>
-    <string name="keybox_pool_count">Available: %1$d / 10 distinct keyboxes. Upstream may publish fewer than 10.</string>
+    <string name="keybox_pool_limits">No upstream GitHub address is contacted anymore: candidates come from the keybox bundled in the APK, keyboxes already installed on the device, and this project\'s domestic mirror. Select one, then apply to replace the software engine keybox using the existing import command. This does not provision hardware TEE. Revocation and attestation acceptance are unknown; certificate dates do not establish either. Applying pauses automatic keybox replacement to retain your choice. Total user count: unknown (no generic public endpoint).</string>
+    <string name="keybox_pool_loading">Fetching and validating keyboxes…</string>
+    <string name="keybox_pool_count">Available: %1$d / 10 distinct keyboxes. The curated mirror usually holds fewer than 10.</string>
     <string name="keybox_pool_row">%1$s %2$s · %3$d keys</string>
     <string name="keybox_pool_fetched">Fetched: %1$s</string>
     <string name="keybox_pool_modified">Source Last-Modified (HTTP metadata): %1$s</string>

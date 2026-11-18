@@ -21,8 +21,8 @@ data class SettingsUiState(
 
     /** 组件透明：所有面板/行/按钮底色设为全透明，只留描边与文字。 */
     val componentTransparent: Boolean = false,
-    /** 背景板透明度 0..100（100 = 不透明；0 = 全透明，只剩 1px 描边与文字）。 */
-    val panelOpacity: Int = 100,
+    /** 背景板透明度 0..100（100 = 不透明；0 = 全透明，只剩 1px 描边与文字）。默认 0，跟仓库默认值一致。 */
+    val panelOpacity: Int = 0,
     val pageScale: Float = 1.0f,
     val enableWebDebugging: Boolean = false,
 

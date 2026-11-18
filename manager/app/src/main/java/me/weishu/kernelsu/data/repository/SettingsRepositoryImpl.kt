@@ -114,8 +114,11 @@ class SettingsRepositoryImpl : SettingsRepository {
         get() = prefs.getBoolean("component_transparent", false)
         set(value) = prefs.edit { putBoolean("component_transparent", value) }
 
+    // 背景板透明度：2026-11-18 用户要求「把所有底框都变透明看看效果」，默认值从 100
+    // 改成 0（全透明，只剩 1px 描边与文字）。滑杆还在设置里，用户随时可以调回去；
+    // 已经手动存过值的设备仍按用户自己存的来（不覆盖用户选择）。
     override var panelOpacity: Int
-        get() = prefs.getInt("panel_opacity", 100).coerceIn(0, 100)
+        get() = prefs.getInt("panel_opacity", 0).coerceIn(0, 100)
         set(value) = prefs.edit { putInt("panel_opacity", value.coerceIn(0, 100)) }
 
     override var enableNavigationBadge: Boolean

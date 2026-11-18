@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="keybox_pool_title">Keybox 密钥池</string>
-    <string name="keybox_pool_limits">自动从两个固定上游源获取最多 10 份不同的 keybox。选中后点击应用，通过现有导入命令替换软件引擎的 keybox，不会向硬件 TEE 烧录。吊销状态和证明服务接受情况未知，证书日期不能证明这些状态。应用后暂停后台自动换密钥，以保留你的选择。总使用人数：未知（没有通用公开查询接口）。</string>
-    <string name="keybox_pool_loading">正在获取并校验上游 keybox…</string>
-    <string name="keybox_pool_count">可用：%1$d / 10 份不同 keybox。上游实际发布数量可能少于 10。</string>
+    <string name="keybox_pool_limits">不再访问任何上游 GitHub 地址：候选来自 APK 内置密钥箱、设备上已装的 keybox，以及本项目的国内镜像。选中后点击应用，通过现有导入命令替换软件引擎的 keybox，不会向硬件 TEE 烧录。吊销状态和证明服务接受情况未知，证书日期不能证明这些状态。应用后暂停后台自动换密钥，以保留你的选择。总使用人数：未知（没有通用公开查询接口）。</string>
+    <string name="keybox_pool_loading">正在获取并校验密钥箱…</string>
+    <string name="keybox_pool_count">可用：%1$d / 10 份不同 keybox。镜像是精选的少量箱子，数量通常少于 10。</string>
     <string name="keybox_pool_row">%1$s %2$s · %3$d 把密钥</string>
     <string name="keybox_pool_fetched">获取时间：%1$s</string>
     <string name="keybox_pool_modified">源更新时间（HTTP Last-Modified）：%1$s</string>
