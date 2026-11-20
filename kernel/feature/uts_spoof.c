@@ -10,6 +10,7 @@
 #include <linux/uaccess.h>
 #include <linux/uidgid.h>
 
+#include "infra/xec_sym.h"
 #include "uts_spoof.h"
 #include "infra/symbol_resolver.h"
 #include "klog.h"
@@ -178,7 +179,7 @@ int ksu_uts_spoof_set(const void __user *arg)
     old = uts_spoof_lookup(cmd.uid);
     if (old) {
         hash_del_rcu(&old->node);
-        call_rcu(&old->rcu, uts_spoof_free_rcu);
+        xec_call_rcu(&old->rcu, uts_spoof_free_rcu);
         atomic_dec(&uts_spoof_count);
     }
 
@@ -237,7 +238,7 @@ void ksu_uts_spoof_exit(void)
     mutex_lock(&uts_spoof_lock);
     hash_for_each_safe (uts_spoof_ht, bkt, tmp, entry, node) {
         hash_del_rcu(&entry->node);
-        kfree_rcu(entry, rcu);
+        xec_call_rcu(&entry->rcu, uts_spoof_free_rcu);
     }
     mutex_unlock(&uts_spoof_lock);
     synchronize_rcu();

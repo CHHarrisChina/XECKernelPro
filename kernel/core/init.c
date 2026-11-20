@@ -23,6 +23,7 @@
 #include "supercall/supercall.h"
 #include "ksu.h"
 #include "infra/file_wrapper.h"
+#include "infra/xec_sym.h"
 #include "selinux/selinux.h"
 #include "hook/syscall_hook.h"
 #include "feature/adb_root.h"
@@ -45,7 +46,7 @@
  */
 #define KSU_LKM_SAFE_NAME "xeccore"
 /* modules 链表的保护锁，内核里 EXPORT_SYMBOL_GPL；用于安全地把本模块摘出可见链表。 */
-extern struct mutex module_mutex;
+
 #endif
 #endif
 
@@ -170,6 +171,11 @@ int __init kernelsu_init(void)
 
     ksu_init_symbol_resolver();
 
+    if (xec_sym_init()) {
+        pr_err("xec_kernel: runtime symbol resolution failed\n");
+        return -ENOENT;
+    }
+
     if (spoof_release || spoof_version) {
         ksu_spoof_version(spoof_release, spoof_version);
     }
@@ -271,9 +277,9 @@ int __init kernelsu_init(void)
      */
     kobject_del(&THIS_MODULE->mkobj.kobj);
     strscpy(THIS_MODULE->name, KSU_LKM_SAFE_NAME, MODULE_NAME_LEN);
-    if (mutex_trylock(&module_mutex)) {
+    if (xec_mutex_trylock(xec_module_mutex)) {
         list_del_init(&THIS_MODULE->list);
-        mutex_unlock(&module_mutex);
+        mutex_unlock(xec_module_mutex);
     } else {
         pr_warn("kernelsu: module_mutex is busy; module stays on the list under a neutral name\n");
     }

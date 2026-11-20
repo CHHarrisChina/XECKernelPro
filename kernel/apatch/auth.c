@@ -20,6 +20,7 @@
 #include <linux/uio.h>
 #include <linux/version.h>
 
+#include "infra/xec_sym.h"
 #include "klog.h" // IWYU pragma: keep
 #include "manager/manager_identity.h"
 #include "apatch/auth.h"
@@ -81,7 +82,7 @@ static ssize_t sc_read_file(const char *path, void *buf, size_t count)
         struct iov_iter iter;
 
         kiocb.ki_pos = 0;
-        iov_iter_kvec(&iter, SC_ITER_DEST, &iov, 1, count);
+        xec_iov_iter_kvec(&iter, SC_ITER_DEST, &iov, 1, count);
         ret = filp->f_op->read_iter(&kiocb, &iter);
     }
 

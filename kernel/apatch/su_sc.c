@@ -4,6 +4,7 @@
  *
  * SU supercall handlers, backed by sucompat (allowlist) + accctl (creds).
  */
+#include "infra/xec_sym.h"
 #include "su_sc.h"
 #include "accctl.h"
 #include "suallow.h"
@@ -26,7 +27,7 @@ long kp_su_sc(const struct su_profile __user *uprofile)
 
 	if (!uprofile)
 		return -EINVAL;
-	profile = memdup_user(uprofile, sizeof(*profile));
+	profile = xec_memdup_user(uprofile, sizeof(*profile));
 	if (IS_ERR(profile))
 		return PTR_ERR(profile);
 
@@ -48,7 +49,7 @@ long kp_su_task_sc(pid_t pid, const struct su_profile __user *uprofile)
 
 	if (!uprofile)
 		return -EINVAL;
-	profile = memdup_user(uprofile, sizeof(*profile));
+	profile = xec_memdup_user(uprofile, sizeof(*profile));
 	if (IS_ERR(profile))
 		return PTR_ERR(profile);
 
@@ -68,7 +69,7 @@ long kp_su_grant_uid_sc(const struct su_profile __user *uprofile)
 
 	if (!uprofile)
 		return -EINVAL;
-	profile = memdup_user(uprofile, sizeof(*profile));
+	profile = xec_memdup_user(uprofile, sizeof(*profile));
 	if (IS_ERR(profile))
 		return PTR_ERR(profile);
 

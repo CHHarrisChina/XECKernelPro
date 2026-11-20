@@ -6,6 +6,7 @@
  * RCU for readers (the exec path). Entries are replaced wholesale by
  * KSU_IOCTL_SET_EXEC_POLICY; count == 0 or restricted == 0 removes the uid.
  */
+#include "infra/xec_sym.h"
 #include "exec_policy.h"
 
 #include <linux/hashtable.h>
@@ -28,6 +29,12 @@ struct exec_policy_entry {
     struct hlist_node node;
     struct rcu_head rcu;
 };
+
+static void exec_policy_free_rcu(struct rcu_head *head)
+{
+    kfree(container_of(head, struct exec_policy_entry, rcu));
+}
+
 
 static DEFINE_HASHTABLE(policy_ht, POLICY_BUCKETS);
 static DEFINE_MUTEX(policy_lock);
@@ -138,7 +145,7 @@ bool ksu_exec_policy_allows_argv(uid_t uid, const char __user *const __user *arg
             continue;
 
         // First token of the command string.
-        char *sp = strnchr(buf, sizeof(buf), ' ');
+        char *sp = xec_strnchr(buf, sizeof(buf), ' ');
         if (sp)
             *sp = '\0';
         strscpy(command, buf, sizeof(command));
@@ -233,11 +240,11 @@ int ksu_exec_policy_set(const void __user *arg)
          * exactly one version visible at every instant.
          */
         hlist_replace_rcu(&old->node, &entry->node);
-        call_rcu(&old->rcu, free_entry_rcu);
+        xec_call_rcu(&old->rcu, free_entry_rcu);
         pr_info("exec_policy: uid %u restricted to %u command(s) (replaced)\n", cmd.uid, cmd.count);
     } else if (old) {
         hash_del_rcu(&old->node);
-        call_rcu(&old->rcu, free_entry_rcu);
+        xec_call_rcu(&old->rcu, free_entry_rcu);
         pr_info("exec_policy: uid %u unrestricted\n", cmd.uid);
     } else if (entry) {
         hash_add_rcu(policy_ht, &entry->node, cmd.uid);
@@ -288,7 +295,7 @@ void ksu_exec_policy_exit(void)
     mutex_lock(&policy_lock);
     hash_for_each_safe (policy_ht, bkt, tmp, entry, node) {
         hash_del_rcu(&entry->node);
-        kfree_rcu(entry, rcu);
+        xec_call_rcu(&entry->rcu, exec_policy_free_rcu);
     }
     mutex_unlock(&policy_lock);
     synchronize_rcu();

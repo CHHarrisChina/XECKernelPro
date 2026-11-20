@@ -7,6 +7,7 @@
  * all capabilities + uid/gid switch via a freshly prepared cred. The SELinux
  * translabel helper is resolved at runtime like KP does.
  */
+#include "infra/xec_sym.h"
 #include "accctl.h"
 
 #include <linux/capability.h>
@@ -164,7 +165,7 @@ int kp_commit_su(uid_t to_uid, const char *sctx)
 			}
 			logkw("magisk domain translabel failed (%d), kernel cred fallback\n", rc);
 		}
-		struct cred *new = prepare_kernel_cred(NULL);
+		struct cred *new = xec_prepare_kernel_cred(NULL);
 		if (!new)
 			return -ENOMEM;
 		commit_creds(new);
@@ -177,7 +178,7 @@ int kp_commit_su(uid_t to_uid, const char *sctx)
 	rc = commit_common_su(to_uid, sctx);
 	if (rc) {
 		logkw("commit_common_su failed (%d), falling back to kernel cred\n", rc);
-		struct cred *new = prepare_kernel_cred(NULL);
+		struct cred *new = xec_prepare_kernel_cred(NULL);
 		if (!new)
 			return -ENOMEM;
 		commit_creds(new);
@@ -205,7 +206,7 @@ int kp_commit_su(uid_t to_uid, const char *sctx)
  * deferred path can prepare and commit creds in the right context without any
  * adaptation. It calls commit_common_su() rather than the kp_commit_su()
  * convenience wrapper on purpose: that wrapper falls back to
- * prepare_kernel_cred(NULL) (uid 0, u:r:kernel:s0, returns 0) when the SELinux
+ * xec_prepare_kernel_cred(NULL) (uid 0, u:r:kernel:s0, returns 0) when the SELinux
  * translabel fails, which is only defensible when the *caller* asked for root
  * synchronously and can notice the result. A cross-task grant is silent, so the
  * deferred path keeps commit_common_su()'s abort semantics: translabel failure
@@ -251,7 +252,7 @@ int kp_task_su(pid_t pid, uid_t to_uid, const char *sctx)
 	struct kp_su_task_work *w;
 	int rc;
 
-	task = find_get_task_by_vpid(pid);
+	task = xec_find_get_task_by_vpid(pid);
 	if (!task) {
 		logke("task_su: no task pid %d\n", pid);
 		return -ESRCH;

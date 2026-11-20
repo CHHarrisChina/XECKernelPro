@@ -9,6 +9,7 @@
 #include <linux/task_work.h>
 #include <linux/version.h>
 #include <linux/jiffies.h>
+#include "infra/xec_sym.h"
 #include "klog.h" // IWYU pragma: keep
 #include "manager/manager_identity.h"
 #include "manager/manager_observer.h"
@@ -81,7 +82,7 @@ void ksu_maybe_rescan_manager(void)
 {
     static unsigned long last_rescan;
     static unsigned int misses;
-    unsigned long now = jiffies;
+    unsigned long now = *xec_jiffies;
     unsigned long wait;
 
     if (likely(ksu_is_manager_appid_valid())) {
@@ -95,7 +96,7 @@ void ksu_maybe_rescan_manager(void)
      * 5s/10s/20s 几轮足够；而真配错包名那种永久无效的情况会退到 320s 一次，
      * 不会让任何一个刷 ioctl 的应用把 /data/app 扫描变成 12 次/分钟的常驻负载。
      */
-    wait = msecs_to_jiffies(5000u << (misses < 6 ? misses : 6));
+    wait = xec___msecs_to_jiffies(5000u << (misses < 6 ? misses : 6));
     if (last_rescan && time_before(now, last_rescan + wait))
         return;
     last_rescan = now;

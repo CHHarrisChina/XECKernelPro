@@ -17,6 +17,7 @@
 #include <linux/hashtable.h>
 #include <linux/kref.h>
 
+#include "infra/xec_sym.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
 #include "runtime/ksud_boot.h"
@@ -63,6 +64,12 @@ struct perm_data {
     struct kref ref;
     struct app_profile profile;
 };
+
+static void perm_data_free_rcu(struct rcu_head *head)
+{
+    kfree(container_of(head, struct perm_data, rcu));
+}
+
 
 // protected by rcu
 #define ALLOW_LIST_BITS 8
@@ -156,7 +163,7 @@ static bool profile_valid(struct app_profile *profile)
 static void release_perm_data(struct kref *ref)
 {
     struct perm_data *p = container_of(ref, struct perm_data, ref);
-    kfree_rcu(p, rcu);
+    xec_call_rcu(&p->rcu, perm_data_free_rcu);
 }
 
 static void put_perm_data(struct perm_data *data)

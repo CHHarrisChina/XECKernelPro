@@ -5,6 +5,7 @@
  * Ported from kernel/patch/common/sucompat.c (allowlist part only; the execve
  * interception hooks are out of scope for the LKM framework).
  */
+#include "infra/xec_sym.h"
 #include "suallow.h"
 #include "kstorage.h"
 
@@ -161,8 +162,8 @@ static char *kp_read_config_file(const char *path, loff_t *out_len)
 		logkw("open %s failed: %ld\n", path, PTR_ERR(filp));
 		return NULL;
 	}
-	len = vfs_llseek(filp, 0, SEEK_END);
-	vfs_llseek(filp, 0, SEEK_SET);
+	len = xec_vfs_llseek(filp, 0, SEEK_END);
+	xec_vfs_llseek(filp, 0, SEEK_SET);
 	if (len <= 0) {
 		filp_close(filp, NULL);
 		logkw("%s empty\n", path);

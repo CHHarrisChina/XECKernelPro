@@ -4,6 +4,7 @@
  *
  * Ported from kernel/patch/common/kstorage.c.
  */
+#include "infra/xec_sym.h"
 #include "kstorage.h"
 
 #include <linux/err.h>
@@ -78,7 +79,7 @@ int kp_kstorage_write(int gid, long did, void *data, int offset, int len, bool d
 	lock = &kstorage_glocks[gid];
 
 	/* Do the potentially-sleeping allocation/copy before the RCU critical
-	 * section (vmalloc()/memdup_user() may sleep). */
+	 * section (vmalloc()/xec_memdup_user() may sleep). */
 	new = vmalloc(sizeof(*new) + len);
 	if (!new)
 		return -ENOMEM;
@@ -86,7 +87,7 @@ int kp_kstorage_write(int gid, long did, void *data, int offset, int len, bool d
 	new->did = did;
 	new->dlen = 0;
 	if (data_is_user) {
-		void *drc = memdup_user(data + offset, len);
+		void *drc = xec_memdup_user(data + offset, len);
 		if (IS_ERR(drc)) {
 			vfree(new);
 			return PTR_ERR(drc);
@@ -122,7 +123,7 @@ int kp_kstorage_write(int gid, long did, void *data, int offset, int len, bool d
 	spin_unlock(lock);
 
 	if (old)
-		call_rcu(&old->rcu, reclaim_callback);
+		xec_call_rcu(&old->rcu, reclaim_callback);
 	return 0;
 }
 const struct kp_kstorage *kp_kstorage_get(int gid, long did)
@@ -252,7 +253,7 @@ int kp_kstorage_remove(int gid, long did)
 			hlist_del_rcu(&pos->hnode);
 			group_sizes[gid]--;
 			spin_unlock(lock);
-			call_rcu(&pos->rcu, reclaim_callback);
+			xec_call_rcu(&pos->rcu, reclaim_callback);
 			return 0;
 		}
 	}
